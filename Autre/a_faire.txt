@@ -1,0 +1,6 @@
+- Ajout channel poll
+- ajout fonction poll
+- ajout fonction devoirs
+- ajout role lock
+- ajout role immune
+- prévoir fautes orthographe dans !correction 
