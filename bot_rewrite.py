@@ -3,6 +3,7 @@ from discord.ext import commands
 import os
 from pymongo import MongoClient
 import datetime
+import json
 
 TOKEN = "Njg5MTg0MTU5MDcxMzM4NTAy.Xm_K3g.-NejIbWzgY9SNV5lUf5LQAMPc4s"
 
@@ -10,28 +11,21 @@ schoolBot = commands.Bot(command_prefix='!')
 
 # Data about the mongo database used
 # Needs to have a predefined mongo database
-mongoDBAddress = 'localhost'
-mongoDBPort = 27017
-mongoDBName = 'schoolBot'
-mongoDBCollections = {
-    'professeur': 'professeur',
-    'eleve': 'eleve',
-    'devoir': 'devoir',
-    'correction':'correction'
-}
+with open("source_sloth/config/dbStruct.json", "r") as dbConfig:
+    dbStruct = json.load(dbConfig)
 
 # Connect and access to mongo database "schoolBot"
-mongoCli = MongoClient(mongoDBAddress, mongoDBPort)
-db = mongoCli[mongoDBName]
+mongoCli = MongoClient(dbStruct['db_address'], dbStruct['db_port'])
+db = mongoCli[dbStruct['db_name']]
 
-# # Access example to the collection called "devoir" in database "schoolBot"
-# devoirDB = db[mongoDBCollections['devoir']]
-# # Getting back all "devoir" corresponding to the "subject" = "math"
-# # Fake data were registered for test purpose
-# dateTest = datetime.datetime(2020, 4, 9)
-# devoirs = devoirDB.find({'deadline':{'$gt':dateTest}}).sort([('cible', 1)])
-# for dev in devoirs:
-#     print(dev)
+# Access example to the collection called "devoir" in database "schoolBot"
+devoirDB = db[dbStruct['db_collections']['homework']]
+# Getting back all "devoir" corresponding to the "subject" = "math"
+# Fake data were registered for test purpose
+dateTest = datetime.datetime(2020, 4, 9)
+devoirs = devoirDB.find({dbStruct['db_collections']['homework_fields']['deadline']:{'$gt':dateTest}}).sort([(dbStruct['db_collections']['homework_fields']['target'], 1)])
+for dev in devoirs:
+    print(dev)
 
 # Three functions to manage the COGs 
 @schoolBot.command()
@@ -79,7 +73,7 @@ async def reload(ctx, extension):
         print(f"Extension {extension} can not be loaded")
 
 # Automatic load of all COGs listed in folder './cogs'
-for filename in os.listdir("./cogs"):
+for filename in os.listdir("source_sloth/cogs"):
     if filename.endswith('.py'):
         try:
             schoolBot.load_extension(f'cogs.{filename[:-3]}')
@@ -92,4 +86,4 @@ for filename in os.listdir("./cogs"):
 
 # print(", ".join(schoolBot.cogs.keys()))
 
-schoolBot.run(TOKEN)
+# schoolBot.run(TOKEN)

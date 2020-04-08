@@ -1,0 +1,44 @@
+{
+    "__comment": "This config file is used for homogeneity purpose with the database parameters and fields",
+    "db_address": "localhost",
+    "db_port": 27017,
+    "db_name": "schoolBot",
+    "db_collections": {
+        "teacher": "professeur",
+        "teacher_fields":{
+            "id":"_id",
+            "name": "nom",
+            "subject": "matiere",
+            "classes": "classes",
+            "published_homework": "devoir"
+        },
+        "student": "eleve",
+        "student_fields":{
+            "id":"_id",
+            "name": "nom",
+            "subject": "matiere",
+            "classe": "classe",
+            "sent_homework": "devoir"
+        },
+        "homework": "devoir",
+        "homework_fields": {
+            "id": "_id",
+            "name": "name",
+            "published_date": "published_date",
+            "deadline": "deadline",
+            "creator": "creator",
+            "subject": "subject",
+            "target": "cible"
+        },
+        "correction":  "correction",
+        "correction_fields": {
+            "id": "_id",
+            "name": "name",
+            "published_date": "published_date",
+            "origin_homework": "origin_homework",
+            "creator": "creator",
+            "subject": "subject",
+            "target": "cible"
+        }
+    }
+}
