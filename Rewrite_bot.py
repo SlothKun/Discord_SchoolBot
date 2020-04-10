@@ -2,13 +2,13 @@ from discord.ext import commands
 import discord
 import os
 
-TOKEN = "Njg5MTg0MTU5MDcxMzM4NTAy.Xm_K3g.-NejIbWzgY9SNV5lUf5LQAMPc4s"
+TOKEN = "NjA3Mzc4MjY2MTY0MDM1NTg0.XpDLug._MJ5Ao8duP32RMcab2NvCZKNT2o"
 
-bot = commands.Bot(command_prefix='!')
+bot = commands.Bot(command_prefix='$')
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(activity=discord.Game("Make bugs great again"))
+    await bot.change_presence(activity=discord.Game("N'oublie pas l'await"))
     print('logged in as')
     print(bot.user.name)
     print(bot.user.id)
