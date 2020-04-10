@@ -39,6 +39,13 @@
             "creator": "creator",
             "subject": "subject",
             "target": "cible"
+        },
+        "emoji": "emoji",
+        "emoji_fields": {
+            "id": "_id",
+            "name": "name",
+            "value": "value",
+            "utility": "utility"
         }
     }
 }
