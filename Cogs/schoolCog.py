@@ -121,6 +121,7 @@ class SchoolBot(commands.Cog):
     async def manageFile(self, message):
         if message.author in self.hmwManagers and len(message.attachments) > 0:
             # Detect if a file has been uploaded and if the uploader is currently trying to manage some homeworks
+            # TODO: Take care to only add file for people who ask of it !
             if self.hmwManagers[message.author].fileAwaited:
                 # Check if the uploader notified that a file will be linked to his homework
                 hmwFiles = message.attachments
@@ -223,7 +224,7 @@ class SchoolBot(commands.Cog):
 
                 self.hmwManagers[ctx.author].updateActionState(0)
                 botMsg += f"\n**Ajout d'un nouveau devoir - Étape 2/{self.hmwManagers[ctx.author].getNbSubState()}**"
-                botMsg += f"\n- Si vous souhaitez lié un document à ce devoir: Veuillez cliquer sur la réaction {checkEmoji} au bas de ce message."
+                botMsg += f"\n- Si vous souhaitez lier un document à ce devoir: Veuillez cliquer sur la réaction {checkEmoji} au bas de ce message."
                 botMsg += "\n\tLe prochain document que vous enverrez dans ce salon sera associé au devoir en cours d'enregistrement"
                 botMsg += "\n- Sinon, précisez la date limite de dépôt du devoir avec la commande `!date DATE_LIMITE`"
                 botMsg += "\n\t'DATE_LIMITE' doit être sous le format 'AAAA-MM-JJ'"
