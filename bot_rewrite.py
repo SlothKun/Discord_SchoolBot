@@ -66,6 +66,15 @@ async def reload(ctx, extension):
         print(f"Extension {extension} can not be loaded")
         print(e)
 
+#TEMP BECAUSE FAIGNASSE
+@schoolBot.command()
+async def q(ctx):
+    try:
+        await reload(ctx, 'schoolCog')
+        await ctx.send("SchoolCog reloaded")
+    except:
+        await ctx.send("SchoolCog failed to reload")
+
 # Automatic load at start of all COGs listed in folder './cogs'
 for filename in os.listdir("src/cogs"):
     if filename.endswith('.py'):
@@ -84,5 +93,5 @@ for filename in os.listdir("src/cogs"):
 
 # print(", ".join(schoolBot.cogs.keys()))
 
-with open("src/bot_token.json") as tokenFile:
+with open("src/config/bot_token.json") as tokenFile:
     schoolBot.run(json.load(tokenFile)['TOKEN_SLOTH_TS1'])
