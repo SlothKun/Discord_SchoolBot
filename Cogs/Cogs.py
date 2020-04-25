@@ -17,6 +17,7 @@ class Test(commands.Cog):
     def homework_date_sorting(self, hmw_list):
         current_date = datetime.datetime.utcnow()
         hmw_dict = {}
+        print("lolol", hmw_list[0])
         for hmw in hmw_list:
             hmw_dict[hmw['deadline']-current_date] = hmw
         hmw_list = []
@@ -207,6 +208,10 @@ class Test(commands.Cog):
                     await ctx.send("Veuillez s'il vous plait entrer un nombre entre 2 et 10.")
                     return
 
+
+
+### RECEPTION
+
     @commands.Cog.listener('on_message')
     async def file_sending(self, message):
         start = time.time()
@@ -233,8 +238,12 @@ class Test(commands.Cog):
                         end = time.time()
                         print(end - start)
                         buffer = await resp.read()
-                chan_id = self.db['send_recv_channels'].find({'chan_send_id': message.channel.id})[0]['subject']
-                all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': chan_id}))
+                try:
+                    all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
+                except Exception as e:
+                    if str(e) == "no such item for Cursor instance":
+                        await message.channel.send("```Aucun devoir pour cette matière```")
+                    return
                 hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
                 iterator = 0
                 for hmw in all_hmw:
@@ -244,8 +253,9 @@ class Test(commands.Cog):
                 hmw_selection = await message.channel.send(hmw_selection + "```")
                 for nb in range(0, iterator):
                     await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
-                reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
-                reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+            reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
+            async with message.channel.typing():
                 student_hmw = {
                     'student_id': message.author.id,
                     'subject': hmw_list[reaction_nb][0],
@@ -264,7 +274,8 @@ class Test(commands.Cog):
             await bot_msg.delete()
         except Exception as e:
             if str(e) == "no such item for Cursor instance":
-                await message.channel.send("```Aucun devoir pour cette matière```")
+                print(e)
+                return
             elif str(e) == "asyncio.exceptions.TimeoutError":
                 bot_msg = await message.channel.send(f"<@{message.author.id}> Pas de réponse, annulation de l'envoi...")
                 await asyncio.sleep(15)
@@ -273,8 +284,12 @@ class Test(commands.Cog):
                 try:
                     async with message.channel.typing():
                         await message.delete()
-                        chan_id = self.db['send_recv_channels'].find({'chan_send_id':message.channel.id})[0]['subject']
-                        all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': chan_id}))
+                        try:
+                            all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
+                        except Exception as e:
+                            if str(e) == "no such item for Cursor instance":
+                                await message.channel.send("```Aucun devoir pour cette matière```")
+                            return
                         hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
                         iterator = 0
                         for hmw in all_hmw:
@@ -305,7 +320,8 @@ class Test(commands.Cog):
                     await bot_msg.delete()
                 except Exception as e:
                     if str(e) == "no such item for Cursor instance":
-                        await message.channel.send("```Aucun devoir pour cette matière```")
+                        print(e)
+                        return
                     else:
                         print(e)
             else:

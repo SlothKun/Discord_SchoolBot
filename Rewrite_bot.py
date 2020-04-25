@@ -18,6 +18,7 @@ async def on_ready():
 async def load(ctx, extension):
     try:
         bot.load_extension(f'Cogs.{extension}')
+        print(f"Extension {extension} loaded")
     except commands.ExtensionNotFound as e:
         print(f"Extension {extension} is not found")
         print(e)
