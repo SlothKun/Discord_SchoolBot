@@ -8,7 +8,7 @@ bot = commands.Bot(command_prefix='$')
 
 @bot.event
 async def on_ready():
-    await bot.change_presence(activity=discord.Game("N'oublie pas l'await"))
+    await bot.change_presence(activity=discord.Game("J'envoi des devoirs, mais surtout de l'amour ❤"))
     print('logged in as')
     print(bot.user.name)
     print(bot.user.id)

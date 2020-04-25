@@ -4,6 +4,9 @@ from pymongo import MongoClient
 import datetime
 import asyncio
 import json
+import aiohttp
+import io
+import time
 
 class Test(commands.Cog):
     def __init__(self, bot):
@@ -11,9 +14,21 @@ class Test(commands.Cog):
         self.bot = bot
         self.db = MongoClient('localhost', 27017).SchoolBot
 
+    def homework_date_sorting(self, hmw_list):
+        current_date = datetime.datetime.utcnow()
+        hmw_dict = {}
+        for hmw in hmw_list:
+            hmw_dict[hmw['deadline']-current_date] = hmw
+        hmw_list = []
+        hmw_dict = sorted(hmw_dict.items())
+        for item, value in hmw_dict:
+            hmw_list.append(value)
+        return hmw_list
+
+
     @commands.command()
     async def ping(self, ctx):
-        await ctx.send("Un ping inutile into vexation et mise en 'ne pas deranger'")
+        await ctx.send("Un ping inutile into vexation into mise en 'ne pas deranger'")
         await self.bot.change_presence(status=discord.Status.dnd)
 
     @commands.command()
@@ -59,27 +74,33 @@ class Test(commands.Cog):
                 - ajouter cours dans la bdd
                 - afficher le prochain cours dans un channel
                 - faire l'edition / suppression / affichage cours
+                - add verif no bot answer
             '''
-            if str(reaction) == self.db.emoji.find({'name':'0'})[0]['value']:
-                all_msg = []
-                bot_msg = await reaction.message.channel.send("Veuillez préciser la matière : ")
-                all_msg.append(bot_msg)
-                matiere = await self.bot.wait_for('message', timeout=60)
-                all_msg.append(matiere)
-                print(matiere)
-                bot_msg = await reaction.message.channel.send("Veuillez préciser la date du cours en suivant le format jj/mm : ")
-                all_msg.append(bot_msg)
-                date = await self.bot.wait_for('message', timeout=60)
-                all_msg.append(date)
-                bot_msg = await reaction.message.channel.send("Veuillez préciser l'heure du cours en suivant le format hh:mm : ")
-                all_msg.append(bot_msg)
-                heure = await self.bot.wait_for('message', timeout=60)
-                all_msg.append(heure)
-                print(matiere.content, date.content, heure.content)
-
+            if message_obj['command'] == "cours":
+                if str(reaction) == self.db.emoji.find({'name':'0'})[0]['value']:
+                    all_msg = []
+                    bot_msg = await reaction.message.channel.send("Veuillez préciser la matière : ")
+                    all_msg.append(bot_msg)
+                    matiere = await self.bot.wait_for('message', timeout=60)
+                    all_msg.append(matiere)
+                    print(matiere)
+                    bot_msg = await reaction.message.channel.send("Veuillez préciser la date du cours en suivant le format jj/mm : ")
+                    all_msg.append(bot_msg)
+                    date = await self.bot.wait_for('message', timeout=60)
+                    all_msg.append(date)
+                    bot_msg = await reaction.message.channel.send("Veuillez préciser l'heure du cours en suivant le format hh:mm : ")
+                    all_msg.append(bot_msg)
+                    heure = await self.bot.wait_for('message', timeout=60)
+                    all_msg.append(heure)
+                    print(matiere.content, date.content, heure.content)
+            #elif message_obj['command'] == "file_sending":
+             #   print(reaction)
         except Exception as e:
-            print(e)
-            return
+            if str(e) == "no such item for Cursor instance":
+                return
+            else:
+                print(e)
+                return
 
 
     @commands.command()
@@ -188,33 +209,105 @@ class Test(commands.Cog):
 
     @commands.Cog.listener('on_message')
     async def file_sending(self, message):
+        start = time.time()
         if message.author == self.bot.user:
             return
+        hmw_selection = ""
+        hmw_list = []
+
+        def check_reaction(reaction, user):
+            if user == message.author and reaction.message.id == hmw_selection.id:
+                return reaction, user
+
         try:
-            channel_obj = self.db.send_recv_channels.find({'chan_send_id': str(message.channel.id)})[0]
-            ### TO-DO : retirer le int et met le nombre directement dans la bdd au lieu d'une str
-            ### TO-DO : ajouter le writing mode
-            prof = self.bot.get_user(int(channel_obj['teacher_id']))
-            recv_chan = self.bot.get_channel(int(channel_obj['chan_recv_id']))
-            send_chan = self.bot.get_channel(int(channel_obj['chan_send_id']))
-            file = await message.attachments[0].to_file()
-            await message.delete()
-            print("message :", message.content)
-            await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=file)
-            await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
-            bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été envoyé")
+            channel_obj = self.db.send_recv_channels.find({'chan_send_id': message.channel.id})[0]
+            async with message.channel.typing():
+                prof = self.bot.get_user(int(channel_obj['teacher_id']))
+                recv_chan = self.bot.get_channel(int(channel_obj['chan_recv_id']))
+                send_chan = self.bot.get_channel(int(channel_obj['chan_send_id']))
+                async with aiohttp.ClientSession() as session:
+                    url = message.attachments[0].url
+                    filename = message.attachments[0].filename
+                    async with session.get(url) as resp:
+                        await message.delete()
+                        end = time.time()
+                        print(end - start)
+                        buffer = await resp.read()
+                chan_id = self.db['send_recv_channels'].find({'chan_send_id': message.channel.id})[0]['subject']
+                all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': chan_id}))
+                hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
+                iterator = 0
+                for hmw in all_hmw:
+                    hmw_list.append([hmw['subject'], hmw['name']])
+                    hmw_selection += f"{self.db.emoji.find({'name': str(iterator)})[0]['value']} -> {hmw['subject']} : {hmw['name']}\n"
+                    iterator += 1
+                hmw_selection = await message.channel.send(hmw_selection + "```")
+                for nb in range(0, iterator):
+                    await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
+                reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
+                student_hmw = {
+                    'student_id': message.author.id,
+                    'subject': hmw_list[reaction_nb][0],
+                    'hmw_name': hmw_list[reaction_nb][1],
+                    'sending_date': datetime.datetime.utcnow(),
+                    'message': message.content,
+                    'filename': filename,
+                    'file': buffer
+                }
+                self.db.student_hmw.insert_one(student_hmw)
+                ### IMPORTANT : sur la ligne commentée suivante, on voit comment il faut envoyer le fichier !
+                # await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=discord.File(fp=io.BytesIO(buffer), filename=filename))
+                await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
+                bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
             await asyncio.sleep(30)
             await bot_msg.delete()
         except Exception as e:
             if str(e) == "no such item for Cursor instance":
-                return
-            elif str(e) == "list index out of range":
-                await message.delete()
-                await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}")
-                await recv_chan.send(content=f"{message.author.nick} : a envoyé un message")
-                bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été envoyé")
-                await asyncio.sleep(30)
+                await message.channel.send("```Aucun devoir pour cette matière```")
+            elif str(e) == "asyncio.exceptions.TimeoutError":
+                bot_msg = await message.channel.send(f"<@{message.author.id}> Pas de réponse, annulation de l'envoi...")
+                await asyncio.sleep(15)
                 await bot_msg.delete()
+            elif str(e) == "list index out of range":
+                try:
+                    async with message.channel.typing():
+                        await message.delete()
+                        chan_id = self.db['send_recv_channels'].find({'chan_send_id':message.channel.id})[0]['subject']
+                        all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': chan_id}))
+                        hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
+                        iterator = 0
+                        for hmw in all_hmw:
+                            hmw_list.append([hmw['subject'], hmw['name']])
+                            hmw_selection += f"{self.db.emoji.find({'name': str(iterator)})[0]['value']} -> {hmw['subject']} : {hmw['name']}\n"
+                            iterator += 1
+                        hmw_selection = await message.channel.send(hmw_selection + "```")
+                        for nb in range(0, iterator):
+                            await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
+                    reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                    reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
+                    async with message.channel.typing():
+                        student_hmw = {
+                            'student_id': message.author.id,
+                            'subject': hmw_list[reaction_nb][0],
+                            'hmw_name': hmw_list[reaction_nb][1],
+                            'sending_date': datetime.datetime.utcnow(),
+                            'message': message.content
+                        }
+                        self.db.student_hmw.insert_one(student_hmw)
+                        await recv_chan.send(content=f"{message.author.nick} : a envoyé un message")
+                        bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
+                    await asyncio.sleep(30)
+                    await bot_msg.delete()
+                except asyncio.TimeoutError:
+                    bot_msg = await message.channel.send(f"<@{message.author.id}> Pas de réponse, annulation de l'envoi...")
+                    await asyncio.sleep(15)
+                    await bot_msg.delete()
+                except Exception as e:
+                    if str(e) == "no such item for Cursor instance":
+                        await message.channel.send("```Aucun devoir pour cette matière```")
+                    else:
+                        print(e)
             else:
                 print(e)
 
