@@ -6,7 +6,9 @@ import asyncio
 import json
 import aiohttp
 import io
+import urllib
 import time
+import aiofiles
 
 class Test(commands.Cog):
     def __init__(self, bot):
@@ -17,7 +19,6 @@ class Test(commands.Cog):
     def homework_date_sorting(self, hmw_list):
         current_date = datetime.datetime.utcnow()
         hmw_dict = {}
-        print("lolol", hmw_list[0])
         for hmw in hmw_list:
             hmw_dict[hmw['deadline']-current_date] = hmw
         hmw_list = []
@@ -214,37 +215,61 @@ class Test(commands.Cog):
 
     @commands.Cog.listener('on_message')
     async def file_sending(self, message):
-        start = time.time()
         if message.author == self.bot.user:
             return
         hmw_selection = ""
         hmw_list = []
-
+        url_list = []
+        filename_list = []
+        file_list = []
         def check_reaction(reaction, user):
             if user == message.author and reaction.message.id == hmw_selection.id:
                 return reaction, user
-
         try:
+            start = time.time()
             channel_obj = self.db.send_recv_channels.find({'chan_send_id': message.channel.id})[0]
             async with message.channel.typing():
                 prof = self.bot.get_user(int(channel_obj['teacher_id']))
                 recv_chan = self.bot.get_channel(int(channel_obj['chan_recv_id']))
                 send_chan = self.bot.get_channel(int(channel_obj['chan_send_id']))
-                async with aiohttp.ClientSession() as session:
-                    url = message.attachments[0].url
-                    filename = message.attachments[0].filename
-                    async with session.get(url) as resp:
-                        await message.delete()
-                        end = time.time()
-                        print(end - start)
-                        buffer = await resp.read()
+                for i in range(0, len(message.attachments)):
+                    url_list.append(message.attachments[i].url)
+                    filename_list.append(message.attachments[i].filename)
+
+                for i in range(0, len(message.attachments)):
+                    #file_list.append(await message.attachments[i].read())
+                    print("msg attach : ", message.attachments)
+                    print("msg attach len : ", len(message.attachments))
+                    async with aiohttp.ClientSession() as session:
+                        if len(message.attachments) == 1:
+                            async with session.get(url_list[0]) as resp:
+                                await message.delete()
+                                end = time.time()
+                                print("first session : ", end - start)
+                                file_list.append(await resp.read())
+                                #f = await aiofiles.open(filename_list[0], mode='wb')
+                                #await f.write(await resp.read())
+                                #await f.close()
+                        else:
+                            async with session.get(url_list[i]) as resp:
+                                print("iterator : ", i)
+                                file_list.append(await resp.read())
+                                #f = await aiofiles.open(filename_list[i], mode='wb')
+                                #await f.close()
+                try:
+                    await message.delete()
+                    end = time.time()
+                    print(end - start)
+                except Exception as e:
+                    if str(e) == "404 Not Found (error code: 10008): Unknown Message":
+                        pass
                 try:
                     all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
                 except Exception as e:
                     if str(e) == "no such item for Cursor instance":
                         await message.channel.send("```Aucun devoir pour cette matière```")
                     return
-                hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
+                hmw_selection = f"<@{message.author.id}>\n```Veuillez selectionner le devoir correspondant :\n"
                 iterator = 0
                 for hmw in all_hmw:
                     hmw_list.append([hmw['subject'], hmw['name']])
@@ -254,6 +279,7 @@ class Test(commands.Cog):
                 for nb in range(0, iterator):
                     await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
             reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+            await hmw_selection.delete()
             reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
             async with message.channel.typing():
                 student_hmw = {
@@ -262,10 +288,14 @@ class Test(commands.Cog):
                     'hmw_name': hmw_list[reaction_nb][1],
                     'sending_date': datetime.datetime.utcnow(),
                     'message': message.content,
-                    'filename': filename,
-                    'file': buffer
+                    'filename': filename_list,
+                    'file': file_list
                 }
                 self.db.student_hmw.insert_one(student_hmw)
+                f = await aiofiles.open("bbb.jpg", mode='wb')
+                await f.write(file_list[0])
+                await f.close()
+
                 ### IMPORTANT : sur la ligne commentée suivante, on voit comment il faut envoyer le fichier !
                 # await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=discord.File(fp=io.BytesIO(buffer), filename=filename))
                 await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
@@ -280,6 +310,10 @@ class Test(commands.Cog):
                 bot_msg = await message.channel.send(f"<@{message.author.id}> Pas de réponse, annulation de l'envoi...")
                 await asyncio.sleep(15)
                 await bot_msg.delete()
+
+            else:
+                print(e)
+            """
             elif str(e) == "list index out of range":
                 try:
                     async with message.channel.typing():
@@ -324,8 +358,8 @@ class Test(commands.Cog):
                         return
                     else:
                         print(e)
-            else:
-                print(e)
+            """
+
 
     @commands.Cog.listener('on_message')
     async def calme_toi(self, message):
