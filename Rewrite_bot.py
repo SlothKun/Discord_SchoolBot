@@ -19,9 +19,8 @@ async def load(ctx, extension):
     try:
         bot.load_extension(f'Cogs.{extension}')
         print(f"Extension {extension} loaded")
-    except commands.ExtensionNotFound as e:
+    except commands.ExtensionNotFound:
         print(f"Extension {extension} is not found")
-        print(e)
     except commands.ExtensionFailed:
         print(f"Extension {extension} failed to load")
     except commands.NoEntryPointError:
