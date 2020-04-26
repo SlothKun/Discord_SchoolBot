@@ -14,12 +14,6 @@ class SchoolBot(commands.Cog):
     def __init__(self, schoolBot):
         super().__init__()
         self.schoolBot = schoolBot
-        
-        # Homework manager
-        # Will keep track of all homeworks currently attended
-        self.hmwManager = HomeworkManager()
-        # Dict to keep track of people accessing the hmw
-        self.hmwChecker = {}
 
         # Set time elements in french
         locale.setlocale(locale.LC_ALL, 'fr_FR.utf8')
@@ -38,6 +32,12 @@ class SchoolBot(commands.Cog):
         else:
             print(f"Cog {self.__class__.__name__} could not connect to MongoDB")
 
+        # Homework manager
+        # Will keep track of all homeworks currently attended
+        self.hmwManager = HomeworkManager(self.dbStruct, self.mDB)
+        # Dict to keep track of people accessing the hmw
+        self.hmwChecker = {}
+
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Cog {self.__class__.__name__} is online")
@@ -47,7 +47,87 @@ class SchoolBot(commands.Cog):
         if message.author == self.schoolBot.user:
             return
         
-        if self.hmwManager.checkHmw(message.author.id):
+        if self.hmwManager.checkHmw(message.author.id, message.channel.id):
+            # User have previously created an Homework object and is writing in the same channel
+            if self.hmwManager.checkHmwValidity(message.author.id):
+                # User's created Homework object is still valid
+                reactDB = self.mDB[self.dbStruct['db_collections']['emoji']]
+                hmwEmojis = reactDB.find({self.dbStruct['db_collections']['emoji_fields']['utility']: 'hmwCheck'}, {'value': 1})
+                checkEmoji = hmwEmojis[0][self.dbStruct['db_collections']['emoji_fields']['value']]
+                crossEmoji = hmwEmojis[1][self.dbStruct['db_collections']['emoji_fields']['value']]
+                backEmoji = hmwEmojis[2][self.dbStruct['db_collections']['emoji_fields']['value']]
+
+                if len(message.attachments) == 0:
+                    [resMsg, emojiList] = self.hmwManager.updateHmw(message.author.id, message.content)
+                    newMsg = f"{message.author.mention}\n"
+                    newMsg += resMsg
+
+                    updateSuccess = self.hmwManager.updateHmw(message.author.id, message.content)
+                    newMsg = None
+                    docMsg = False
+                    emojiToAdd = []
+                    if updateSuccess:
+                        hmwNewState = self.hmwManager.getHmwState(message.author.id)
+                        hmwLastChange = self.hmwManager.getHmwLastChange(message.author.id)
+                        newMsg = f"{message.author.mention}:\n" + hmwLastChange
+                        # Homework adding state cycle : ["idle", "name", "date", "status", "subject"]
+                        if hmwNewState == "name" :
+                            # Homework name has been set --> date
+                            newMsg += f"\n**Ajout d'un nouveau devoir - Étape 2/{self.hmwManager.getNbSubState(message.author.id)}**"
+                            newMsg += f"```\n- Si vous souhaitez lier un document à ce devoir: Veuillez cliquer sur la réaction {checkEmoji} au bas de ce message."
+                            newMsg += "\n\tLe prochain document envoyé dans ce salon sera associé au devoir en cours d'enregistrement"
+                            newMsg += "\n- Sinon, ignorez les réactions et simplement précisez la date limite de dépôt du devoir"
+                            newMsg += f"\n\tLe format de la date doit être le suivant 'AAAA-MM-JJ' - ex: {datetime.datetime.now().strftime('%Y-%m-%d')}"
+                            
+                            emojiToAdd.append(checkEmoji)
+                            docMsg = True
+                        elif hmwNewState == "date" :
+                            # Homework date has been set --> status
+                            newMsg += f"\n**Ajout d'un nouveau devoir - Étape 3/{self.hmwManager.getNbSubState(message.author.id)}**"
+                            newMsg += "\n```Veuillez préciser le statut du devoir - ex : 'À rendre', 'Obligatoire'"
+                        elif hmwNewState == "status" :
+                            # Homework status has been set --> subject
+                            newMsg += f"\n**Ajout d'un nouveau devoir - Étape 4/{self.hmwManager.getNbSubState(message.author.id)}**"
+                            newMsg += "\n```Veuillez préciser la matière du devoir - ex : 'Mathématiques', 'Physique'"
+                        elif hmwNewState == "subject" :
+                            # Homework subject has been set --> end
+                            newMsg += f"\n**Ajout d'un nouveau devoir - Récapitulatif**"
+                            newMsg += "```" + self.hmwManager.hmwRecap[message.author.id]
+                            newMsg += f"\nVeuillez cliquer sur la réaction {checkEmoji} pour confirmer l'ajout final de ce devoir"
+                            emojiToAdd.append(checkEmoji)
+                    else:
+                        hmwError = self.hmwManager.getHmwLastError(message.author.id)
+                        newMsg = f"{message.author.mention}:\n" + hmwError
+                    if newMsg is not None:
+                        newMsg += "\n\n-----------------"
+                        newMsg += "\nCliquez sur les réactions en-dessous du message pour interagir des façons suivantes:"
+                        newMsg += f"\n\t{backEmoji} - Annuler dernière action"
+                        newMsg += f"\n\t{crossEmoji} - Annuler ajout du devoir"
+                        newMsg += "\n```"
+                        emojiToAdd.append(backEmoji)
+                        emojiToAdd.append(crossEmoji)
+
+                        newBotMsg = await message.channel.send(newMsg)
+
+                        if docMsg:
+                            self.hmwManager.setDocMsg(message.author.id, newBotMsg.id)
+
+                        for emoji in emojiToAdd:
+                            await newBotMsg.add_reaction(emoji)
+                        pass
+                else:
+                    # Message contains a file
+                    await message.channel("Message contains a file")
+                    if self.hmwManager.checkHmwFileStatus(message.author.id):
+                        # File awaited --> must be added
+                        pass
+                    else:
+                        await message.channel("Homework doesn't wait for a file")
+            else:
+                await message.channel.send("Homework too old --> Has been deleted")
+                pass
+        else:
+            # Casual talker, not configuring any homework at the moment
             pass
     #     if message.author in self.hmwManagers and len(message.attachments) > 0:
     #         # Detect if a file has been uploaded and if the uploader is currently trying to manage some homeworks
@@ -82,7 +162,16 @@ class SchoolBot(commands.Cog):
                 # User reacted to the message in time
                 # await reaction.message.channel.send("Réagit à temps")
                 reactDB = self.mDB[self.dbStruct['db_collections']['emoji']]
-                hmwEmojis = reactDB.find({self.dbStruct['db_collections']['emoji_fields']['utility']: 'hmwConf'}, {'value': 1})
+                hmwConfEmojis = reactDB.find({self.dbStruct['db_collections']['emoji_fields']['utility']: 'hmwConf'}, {'value': 1})
+                hmwCheckEmojis = reactDB.find({self.dbStruct['db_collections']['emoji_fields']['utility']: 'hmwCheck'}, {'value': 1})
+
+                newHmwEmoji = hmwConfEmojis[0][self.dbStruct['db_collections']['emoji_fields']['value']]
+                editHmwEmoji = hmwConfEmojis[1][self.dbStruct['db_collections']['emoji_fields']['value']]
+                delHmwEmoji = hmwConfEmojis[2][self.dbStruct['db_collections']['emoji_fields']['value']]
+
+                checkEmoji = hmwCheckEmojis[0][self.dbStruct['db_collections']['emoji_fields']['value']]
+                crossEmoji = hmwCheckEmojis[1][self.dbStruct['db_collections']['emoji_fields']['value']]
+                backEmoji = hmwCheckEmojis[2][self.dbStruct['db_collections']['emoji_fields']['value']]
 
                 # First: Check the state of the homework the user is using (4 states)
                 # --> Never seen this user, currently adding / editing / deleting
@@ -93,31 +182,39 @@ class SchoolBot(commands.Cog):
                     # User not currently using any homework
                     # Creating it with the appropriate userAction
                     newMsg = None
+                    emojis = []
                     userAction = None
-                    if str(reaction) == hmwEmojis[0][self.dbStruct['db_collections']['emoji_fields']['value']]:
+                    if str(reaction) == newHmwEmoji:
                         # Adding a new homework
                         userAction = "Ajout"
-                        self.hmwManager.newHmw(user.id, 0, reaction.message.id)
-                        newMsg = f"{user.mention} **- Ajout d'un nouveau devoir - Étape 1/{self.hmwManager.getNbSubState(user.id)}**"
-                        newMsg += "```Veuillez entrer le nom du devoir que vous souhaitez créer"
-                    elif str(reaction) == hmwEmojis[1][self.dbStruct['db_collections']['emoji_fields']['value']]:
+                        newMsg = f"{user.mention}\n"
+                        newMsg += self.hmwManager.newHmw(user.id, 0, reaction.message.channel.id, reaction.message.id)
+                        emojis.append(crossEmoji)
+                    elif str(reaction) == editHmwEmoji:
                         # Editing an existing homework
                         userAction = "Édition"
                         #TODO: À COMPLÉTER
-                        pass
-                    elif str(reaction) == hmwEmojis[2][self.dbStruct['db_collections']['emoji_fields']['value']]:
+                        await reaction.message.channel.send("Edition mode is not implemented yet")
+                    elif str(reaction) == delHmwEmoji:
                         # Deleting an existing homework
                         userAction = "Suppression"
                         #TODO: À COMPLÉTER
+                        await reaction.message.channel.send("Deletion mode is not implemented yet")
+                    elif str(reaction) == checkEmoji:
+                        # Adding a doc to an homework or validating the homework
+                        # self.hmwManager.hmw(user.id, reaction.message.id)
+                        pass
+                    elif str(reaction) == crossEmoji:
+                        # Cancel homework creation
+                        pass
+                    elif str(reaction) == backEmoji:
+                        # Cancel last modification
                         pass
                     if newMsg is not None:
-                        cancelEmj = reactDB.find({self.dbStruct['db_collections']['emoji_fields']['name']: 'cross'}, {'value': 1})[0][self.dbStruct['db_collections']['emoji_fields']['value']]
-                        newMsg += "\n\n-----------------"
-                        newMsg += f"\nCliquez sur {cancelEmj} pour annuler l'action '{userAction} de devoir'```"
                         botMsg = await reaction.message.channel.send(newMsg)
 
-                        await botMsg.add_reaction(cancelEmj)
-                        pass
+                        for emoji in emojis:
+                            await botMsg.add_reaction(emoji)
             else:
                 # Too late buddy --> Ignored
                 # await reaction.message.channel.send("Too late")
