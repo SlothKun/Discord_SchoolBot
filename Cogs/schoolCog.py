@@ -20,13 +20,15 @@ class SchoolBot(commands.Cog):
 
         # Data about the mongo database used
         # Needs to have a predefined mongo database
-        with open("src/config/dbStruct.json", "r") as dbConfig:
+        with open("config/dbStruct.json", "r") as dbConfig:
             self.dbStruct = json.load(dbConfig)
         # Connect and access to mongo database "schoolBot"
         self.mongoCli = MongoClient(self.dbStruct['db_address'], self.dbStruct['db_port'])
+
         if self.mongoCli is not None:
             try:
                 self.mDB = self.mongoCli[self.dbStruct['db_name']]
+
             except:
                 print(f"Cog {self.__class__.__name__} could not find the database")
         else:
@@ -37,6 +39,7 @@ class SchoolBot(commands.Cog):
         self.hmwManager = HomeworkManager(self.dbStruct, self.mDB)
         # Dict to keep track of people accessing the hmw
         self.hmwChecker = {}
+
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -272,10 +275,10 @@ class SchoolBot(commands.Cog):
             else:
                 res[hmwDate] = [hmw]
         return res
-
+    ### OUBLI PAS DE RERAJOUTER LES 3 " a hmw desc
     homeworkDesc = """Commande permettant de manipuler les devoirs
     --> listage, ajout, modification, suppression"""
-    @commands.command(description=homeworkDesc, name='homework', aliases=['devoir', 'hmw'])
+    @commands.command(description=homeworkDesc, name='homework', aliases=['devoir', 'hmw', 'devoirs'])
     async def hmwList(self, ctx):
         dMsg = ctx.message
 

@@ -2,7 +2,7 @@
     "__comment": "This config file is used for homogeneity purpose with the database parameters and fields",
     "db_address": "localhost",
     "db_port": 27017,
-    "db_name": "SchoolBot",
+    "db_name": "schoolBot",
     "db_collections": {
         "teacher": "professeur",
         "teacher_fields":{
