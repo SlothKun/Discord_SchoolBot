@@ -16,13 +16,14 @@ class Test(commands.Cog):
         self.bot = bot
         self.db = MongoClient('localhost', 27017).SchoolBot
         self.hmw_selection = ""
+        self.correction_selec = ""
 
     @commands.command()
     async def ping(self, ctx):
         await ctx.send("Un ping inutile into vexation into mise en 'ne pas deranger'")
         await self.bot.change_presence(status=discord.Status.dnd)
 
-    @commands.command()
+    @commands.command(aliases=['eleve','élève','élèves','éleve','éleves','elève','elèves'])
     async def eleves(self, ctx):
         await ctx.send("""```
 +-----------------------------------------------------+
@@ -93,8 +94,8 @@ class Test(commands.Cog):
                 print(e)
                 return
 
-
-    @commands.command()
+    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.command(aliases=['cour','course','courses'])
     async def cours(self, ctx):
         await ctx.message.delete()
         ### TO-DO : améliorer aspect graphique
@@ -118,28 +119,57 @@ class Test(commands.Cog):
         }
         self.db.appending_msg.insert_one(msg)
 
-
-    @commands.command()
+    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.command(aliases=['corection','corrections','corections','corecttion','corecttions'])
     async def correction(self, ctx, *complement):
+        def check_reaction(reaction, user):
+            if user == ctx.message.author and reaction.message.id == self.correction_selec.id:
+                print(user)
+                print(reaction)
+                print("-----------------")
+                return reaction, user
+
         if len(complement) == 0:
             await ctx.send("Veuillez recommencer en respectant le format suivant : '!correction nom_de_leleve' avec votre fichier attaché à votre message")
         else:
             try:
                 name = list(complement)[0].lower()
                 student_obj = self.db.eleve.find({'name': name})[0]
-                file = await ctx.message.attachments[0].to_file()
-                await ctx.message.delete()
-                ### TO-DO : retirer le int et met le nombre directement dans la bdd au lieu d'une str
-                ### TO-DO : ajouter le writing mode
-                student = self.bot.get_user(int(student_obj['student_id']))
-                added_msg = ""
-                if len(complement) > 1:
-                    for i in range(1, len(complement)):
-                        added_msg += complement[i] + " "
-                await student.send(content=f"{ctx.message.author.nick} vous a envoyé cette correction : \n {added_msg}", file=file)
-                bot_msg = await ctx.send(content=f"<@{ctx.message.author.id}>, le message a bien été envoyé à {name}")
-                await asyncio.sleep(30)
-                await bot_msg.delete()
+                url = ctx.message.attachments[0].url
+                filename = ctx.message.attachments[0].filename
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url) as resp:
+                        await ctx.message.delete()
+                        file = await resp.read()
+                #file = await ctx.message.attachments[0].to_file()
+                #await ctx.message.delete()
+                sending_choice = f"""<@{ctx.message.author.id}>```
+Voulez vous :
+    {self.db.emoji.find({'name':"1"})[0]['value']} : Envoyer le fichier tout de suite
+    {self.db.emoji.find({'name':"2"})[0]['value']} : Conserver le fichier pour un envoi groupé
+```"""
+                self.correction_selec = await ctx.message.channel.send(sending_choice)
+                for react in range(1, 3):
+                    await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(react)})[0]['value'])
+                reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                await self.correction_selec.delete()
+                if str(reaction) == self.db.emoji.find({'name':'1'})[0]['value']:
+                    student = self.bot.get_user(int(student_obj['student_id']))
+                    added_msg = ""
+                    if len(complement) > 1:
+                        for i in range(1, len(complement)):
+                            added_msg += complement[i] + " "
+                    teacher_name = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+                    async with ctx.message.channel.typing():
+                        await student.send(content=f"{teacher_name} : {ctx.message.author.nick} vous a envoyé cette correction : \n {added_msg}", file=discord.File(fp=io.BytesIO(file), filename=filename))
+                        self.correction_selec = await ctx.send(content=f"<@{ctx.message.author.id}>, le message a bien été envoyé à {name}")
+                    await asyncio.sleep(30)
+                    await self.correction_selec.delete()
+                elif str(reaction) == self.db.emoji.find({'name':'2'})[0]['value']:
+                    self.correction_selec = await ctx.message.channel.send("Cette fonction n'a pas encore été implémentée !")
+                    await asyncio.sleep(15)
+                    await self.correction_selec.delete()
+                    return
             except Exception as e:
                 if str(e) == "list index out of range":
                     await ctx.channel.send("Veuillez recommencer en attachant un fichier à votre message.")
@@ -149,8 +179,8 @@ class Test(commands.Cog):
                 else:
                     print(e)
 
-
-    @commands.command()
+    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.command(aliases=['sondages','sonddage','sonddages'])
     async def sondage(self, ctx, *kwargs):
         msglist = []
         poll_info = {}
@@ -237,7 +267,7 @@ class Test(commands.Cog):
                 hmw_list = []
                 printed_elements = 0
                 index = 1
-                for hmw in all_hmw[start:stop]: # Here something wrong
+                for hmw in all_hmw[start:stop]:
                     hmw_list.append([hmw['subject'], hmw['name']])
                     self.hmw_selection += f"{self.db.emoji.find({'name': str(index)})[0]['value']} -> {hmw['subject']} : {hmw['name']}\n"
                     printed_elements += 1
@@ -259,7 +289,6 @@ class Test(commands.Cog):
                     reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
                 except asyncio.TimeoutError:
                     await self.hmw_selection.delete()
-                    print("lololol")
                     return
 
                 reaction = self.db.emoji.find({'value': str(reaction)})[0]['name']
@@ -400,7 +429,7 @@ class Test(commands.Cog):
                         print(e)
             """
 
-
+    @commands.has_any_role(696433108253409371, 696433108253409373)
     @commands.Cog.listener('on_message')
     async def calme_toi(self, message):
         if message.author == self.bot.user:

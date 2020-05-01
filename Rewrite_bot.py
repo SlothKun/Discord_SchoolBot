@@ -61,6 +61,7 @@ async def reload(ctx, extension):
 for filename in os.listdir("Cogs/"):
     if filename.endswith('.py'):
         try:
+            print(f'Cogs.{filename[:-3]}')
             bot.load_extension(f'Cogs.{filename[:-3]}')
         except commands.ExtensionNotFound:
             print(f"Extension {filename[:-3]} is not found")
