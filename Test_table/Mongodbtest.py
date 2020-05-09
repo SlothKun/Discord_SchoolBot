@@ -9,8 +9,7 @@ subject = ["si", "philo", "anglais", "isn", "physique"]
 channel = {
         'name': 'sloth',
         'id': 122372446761254912,
-        'subject': "matiere test",
-
+        'subject': "matiere test"
     }
 
 client = MongoClient('localhost', 27017)

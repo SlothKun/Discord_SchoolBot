@@ -9,12 +9,17 @@ import io
 import urllib
 import time
 import aiofiles
+import os
+from pathlib import Path
+import xlsxwriter
+import excel2img
+
 
 class Test(commands.Cog):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-        self.db = MongoClient('localhost', 27017).SchoolBot
+        self.db = MongoClient('localhost', 27017).schoolbot
         self.hmw_selection = ""
         self.correction_selec = ""
 
@@ -22,6 +27,117 @@ class Test(commands.Cog):
     async def ping(self, ctx):
         await ctx.send("Un ping inutile into vexation into mise en 'ne pas deranger'")
         await self.bot.change_presence(status=discord.Status.dnd)
+
+    @commands.command()
+    async def hmw_msg_verifier(self, ctx):
+        start = time.time()
+
+        async def hmw_table_img_creation(subject):
+            all_hmw = list(self.db.devoir.find({'subject':subject}))
+            if len(all_hmw) == 0:
+                return
+            all_std = list(self.db.eleve.find())
+
+            # Creation of the excel document
+            workbook = xlsxwriter.Workbook(("Hmw_tables/" + (subject +" .xlsx")))
+            worksheet = workbook.add_worksheet()
+
+            # Formats
+            hmw_format = workbook.add_format({"bg_color": "#70AD47", "align": "right", "border": 1})
+            recv_header_format = workbook.add_format({"bg_color": "#70AD47", "align": "justify", "border": 1})
+            sended_format = workbook.add_format({"bg_color": "#A9D08E", "align": "right", "border": 1})
+            not_sended_format = workbook.add_format({"bg_color": "#a19e9e", "align": "right", "border": 1, "font_color": "#3e3e3e", "italic": "true"})
+            std_header_format = workbook.add_format({"bg_color": "#5B9BD5", "align": "justify", "border": 1})
+            std_format = workbook.add_format({"bg_color": "#9BC2E6", "align": "justify", "border": 1})
+
+            # cells width
+            worksheet.set_column("A:A", 20)
+            worksheet.set_column("B:ZZ", 22)
+
+
+            row = 0
+            col = 0
+
+            # Table creation
+            for hmw in all_hmw:
+                col+=1
+                worksheet.write(row, col, hmw["name"], hmw_format)
+
+            col = 0
+            worksheet.write(row, 0, "Élèves", std_header_format)
+
+            for std in all_std:
+                col = 0
+                row += 1
+                worksheet.write(row, col, std['name'], std_format)
+                for hmw in all_hmw:
+                    col+=1
+                    if len(list(self.db.student_hmw.find({'student_id':std["student_id"]}))) == 0 or len(list(self.db.student_hmw.find({'hmw_name': hmw['name']}))) == 0:
+                        worksheet.write(row, col, "Non rendu", not_sended_format)
+                    else:
+                        # GERER LA DATE
+                        worksheet.write(row, col, ("le 05/16 à 11h53"), sended_format)
+
+            #for each_row in range(0, row):
+            #    worksheet.set_row(each_row, 20)
+
+            workbook.close()
+            excel2img.export_img(("Hmw_tables/" + (subject +" .xlsx")), ("Hmw_tables/" + (subject + ".png")))
+
+
+        async def msg_embed_creation(state, subject):
+            try:
+                img_chan = self.bot.get_channel(708658324614283365)
+                subject_recv_chan = self.bot.get_channel(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'])
+                with open(f"Hmw_tables/{subject}.png", 'rb') as table_img:
+                    table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
+                embed = discord.Embed()
+                embed.set_image(url=table_img_msg.attachments[0].url)
+
+                if state == "create":
+                    embed_msg = await subject_recv_chan.send(embed=embed)
+                    hmw_table = {
+                        'subject': subject,
+                        'recv_chan_id': self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'],
+                        'img_gathering_id': 708658324614283365,
+                        'embed_id': embed_msg.id
+                    }
+                    self.db.hmw_table.insert_one(hmw_table)
+                elif state == 'update':
+                    embed_msg = await subject_recv_chan.fetch_message(self.db.hmw_table.find({'subject':subject})[0]['embed_id'])
+                    embed_msg = await embed_msg.edit(embed=embed)
+            except Exception as e:
+                print(e)
+                pass
+
+
+        all_subjects = []
+        for subject in self.db.send_recv_channels.find():
+            all_subjects.append(subject['subject'])
+        for subject in all_subjects:
+            if len(list(self.db.hmw_table.find({"subject":subject}))) != 0:
+                await hmw_table_img_creation(subject)
+                await msg_embed_creation('update', subject)
+            else:
+                await hmw_table_img_creation(subject)
+                await msg_embed_creation('create', subject)
+
+
+        print("got there : ", time.time() - start)
+
+
+    @commands.command()
+    async def send(self, ctx):
+        embed = discord.Embed()
+        embed.set_image(url="https://cdn.discordapp.com/attachments/696433108253409377/708111834099744768/image1.png")
+        await ctx.send(embed=embed)
+
+    @commands.command()
+    async def modify(self, ctx, id, url):
+        msg = await ctx.channel.fetch_message(id)
+        embed = discord.Embed()
+        embed.set_image(url=url)
+        await msg.edit(content="modification !", embed=embed)
 
     @commands.command(aliases=['eleve','élève','élèves','éleve','éleves','elève','elèves'])
     async def eleves(self, ctx):
@@ -359,6 +475,7 @@ Voulez vous :
 
             async with message.channel.typing():
                 student_hmw = {
+                    'name': str(message.author.nick),
                     'student_id': message.author.id,
                     'subject': hmw_list[int(reaction_nb)-1][0],
                     'hmw_name': hmw_list[int(reaction_nb)-1][1],
@@ -436,7 +553,7 @@ Voulez vous :
             return
         if message.content == "Parle moi autrement":
             await message.channel.send("Pardon humain")
-        elif message.content == "C'est bien bot":
+        elif message.content == "C'est bien p'tit bot":
             await message.channel.send("Merci humain <3")
 
 def setup(bot):
