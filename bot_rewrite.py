@@ -76,7 +76,7 @@ async def q(ctx):
         await ctx.send("SchoolCog failed to reload")
 
 # Automatic load at start of all COGs listed in folder './cogs'
-for filename in os.listdir("cogs"):
+for filename in os.listdir("src/cogs"):
     if filename.endswith('.py'):
         try:
             schoolBot.load_extension(f'cogs.{filename[:-3]}')
@@ -84,14 +84,14 @@ for filename in os.listdir("cogs"):
         except commands.ExtensionNotFound as e:
             print(f"Extension {filename[:-3]} is not found")
             print(e)
-     #   except commands.ExtensionFailed as e:
-     #       print(f"Extension {filename[:-3]} failed to load")
-     #       print(e)
+        except commands.ExtensionFailed as e:
+           print(f"Extension {filename[:-3]} failed to load")
+           print(e)
         except commands.NoEntryPointError as e:
             print(f"Extension {filename[:-3]} can not be loaded")
             print(e)
 
 # print(", ".join(schoolBot.cogs.keys()))
 
-with open("config/bot_token.json") as tokenFile:
+with open("src/config/bot_token.json") as tokenFile:
     schoolBot.run(json.load(tokenFile)['TOKEN'])
