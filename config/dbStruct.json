@@ -46,6 +46,13 @@
             "name": "name",
             "value": "value",
             "utility": "utility"
+        },
+        "role": "role",
+        "role_fields": {
+            "id": "_id",
+            "discordID": "discordID",
+            "name": "name",
+            "authorized": "botAlteration"
         }
     }
 }

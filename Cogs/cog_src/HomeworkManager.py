@@ -109,33 +109,26 @@ class HomeworkManager():
                 res[hmwDate] = [hmw]
         return res
 
-    def listHmw(self):
+    def listHmw(self, botAlteringUser):
         # Get all homework with a deadline greater than the current time
-        print(datetime.utcnow())
-        print(self.hmwCol.count_documents({}))
-        print(self.hmwCol.count_documents({self.hmwFields['date']: {'lte': datetime.now()}}))
-        print(self.hmwCol.count_documents({self.hmwFields['date']: {'gte': datetime.utcnow()}}))
-        homeworks = self.hmwCol.find({})
-        for hmw in homeworks:
-            print(hmw[self.hmwFields['date']])
-            print(hmw[self.hmwFields['date']] >= datetime.utcnow())
-            print(hmw[self.hmwFields['date']] >= datetime.now())
-        homeworks = self.hmwCol.find({self.hmwFields['date']: {'gte': datetime.utcnow()}})
+        homeworks = self.hmwCol.find({self.hmwFields['date']: {'$gte': datetime.utcnow()}})
         emojis = [self.emojiList[HomeworkManager.HMW_ACTIONS[0]], self.emojiList[HomeworkManager.HMW_ACTIONS[1]], self.emojiList[HomeworkManager.HMW_ACTIONS[2]]]
 
         # Formatting the listing homework message before sending it
         formatedHmwList = HomeworkMessage.HMW_UTILS['formatingQuote']
         groupedHmw = self.groupHmwByDate(homeworks)
-        print(groupedHmw)
         for hmwDate in groupedHmw:
             formatedHmwList += f"\n{hmwDate}"
             for homework in groupedHmw[hmwDate]:
                 formatedHmwList += f"\n\t- {homework[self.hmwFields['subject']]} : {homework[self.hmwFields['name']]}"
             formatedHmwList += "\n"
-        formatedHmwList += HomeworkMessage.HMW_UTILS['separationLine']
-        formatedHmwList += f"\n\t{emojis[0]} - Ajouter un devoir"
-        formatedHmwList += f"\n\t{emojis[1]} - Éditer un devoir"
-        formatedHmwList += f"\n\t{emojis[2]} - Supprimer un devoir"
+
+        if botAlteringUser:
+            # Add this part to the message only if user is authorized to alter hmw (from the bot)
+            formatedHmwList += HomeworkMessage.HMW_UTILS['separationLine']
+            formatedHmwList += f"\n\t{emojis[0]} - Ajouter un devoir"
+            formatedHmwList += f"\n\t{emojis[1]} - Éditer un devoir"
+            formatedHmwList += f"\n\t{emojis[2]} - Supprimer un devoir"
         formatedHmwList += HomeworkMessage.HMW_UTILS['formatingQuote']
 
         return (formatedHmwList, emojis)
@@ -261,11 +254,12 @@ class HomeworkManager():
         res += HomeworkMessage.HMW_UTILS['formatingQuote']
         return (res, emojis)
     
-    def getHmwDict(self, creatorID):
+    def insertNewDict(self, creatorID):
         hmwDict = self.homeworks[creatorID].hmwDict()
+        self.hmwCol.insert_one(hmwDict)
 
         res = HomeworkMessage.HMW_CONF['dbUpdated'].substitute()
         (listHmw, emojis) = self.listHmw()
         res += listHmw
 
-        return (hmwDict, res, emojis)
+        return (res, emojis)

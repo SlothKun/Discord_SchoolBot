@@ -11,6 +11,8 @@ from .cog_src.HomeworkManager import HomeworkManager
 from .cog_src.Homework import Homework
 
 class SchoolBot(commands.Cog):
+    MAX_REACTION_TIME = 30 #30 seconds
+
     def __init__(self, schoolBot):
         super().__init__()
         self.schoolBot = schoolBot
@@ -44,12 +46,28 @@ class SchoolBot(commands.Cog):
     async def on_ready(self):
         print(f"Cog {self.__class__.__name__} is online")
 
+    def userRoleCheck(self, userRoles):
+        roleCol = self.mDB[self.dbStruct['db_collections']['role']]
+        
+        idField = self.dbStruct['db_collections']['role_fields']['id']
+        discordIDField = self.dbStruct['db_collections']['role_fields']['discordID']
+        botAuthField = self.dbStruct['db_collections']['role_fields']['authorized']
+
+        botAuthorizedRoles = roleCol.find({botAuthField: True}, {idField: 0, discordIDField: 1})
+
+        for authRole in botAuthorizedRoles:
+            for userRole in userRoles:
+                if userRole.id == int(authRole[discordIDField]):
+                    return True
+        return False
+
+
     @commands.Cog.listener('on_message')
     async def messageListener(self, message):
         if message.author == self.schoolBot.user:
             return
         
-        if self.hmwManager.checkHmw(message.author.id, message.channel.id):
+        if self.userRoleCheck(message.author.roles) and self.hmwManager.checkHmw(message.author.id, message.channel.id):
             # User have previously created an Homework object and is writing in the same channel
             if self.hmwManager.checkHmwValidity(message.author.id):
                 # User's created Homework object is still valid
@@ -59,10 +77,14 @@ class SchoolBot(commands.Cog):
                         newMsg = f"{message.author.mention}\n"
                         newMsg += resMsg
 
+                        if message.author in self.hmwChecker:
+                            await self.hmwChecker[message.author]['botMsg'].delete()
+                            self.hmwChecker[message.author]['userMsgList'].append(message)
+
                         newBotMsg = await message.channel.send(newMsg)
 
                         if message.author in self.hmwChecker:
-                            self.hmwChecker[message.author] = newBotMsg
+                            self.hmwChecker[message.author]['botMsg'] = newBotMsg
 
                         for emoji in emojiList:
                             await newBotMsg.add_reaction(emoji)
@@ -104,12 +126,11 @@ class SchoolBot(commands.Cog):
             return
 
         ## HOMEWORK REACTION MANAGEMENT
-        if user in self.hmwChecker and reaction.message.id == self.hmwChecker[user].id:
+        if self.userRoleCheck(user.roles) and user in self.hmwChecker and reaction.message.id == self.hmwChecker[user]['botMsg'].id:
             reactionDate = datetime.datetime.utcnow()
             reacTime = (reactionDate - reaction.message.created_at).total_seconds()
-            if  reacTime < 15:
-                # User reacted within 15 seconds
-                print(f"Reaction: {str(reaction)}")
+            if  reacTime < SchoolBot.MAX_REACTION_TIME:
+                # User reacted within MAX_REACTION_TIME seconds
                 # Emojis element from DB
                 reactDB = self.mDB[self.dbStruct['db_collections']['emoji']]
 
@@ -130,6 +151,7 @@ class SchoolBot(commands.Cog):
                 newMsg = f"{user.mention}\n"
                 emojis = []
                 userAction = None
+                hmwComplete = False
 
                 if str(reaction) == newHmwEmoji:
                     ######## Adding a new homework
@@ -175,18 +197,24 @@ class SchoolBot(commands.Cog):
 
                     homeworks = hmwDB.find({hmwDateField: {'$gte':datetime.datetime.now()}})
 
-                    (hmwDict, msgBack, emojis) = self.hmwManager.getHmwDict(user.id)
-                    insertRes = hmwDB.insert_one(hmwDict)
+                    (msgBack, emojis) = self.hmwManager.insertNewDict(user.id)
                     newMsg += msgBack
 
-                    if self.hmwManager.deleteHmw(user.id, reaction.message.channel.id):
-                        del self.hmwChecker[user]
+                    hmwComplete = True
 
                 if newMsg is not None:
+                    ######## Sending the new message to the channel + deleting old message
+                    if user in self.hmwChecker:
+                        await self.hmwChecker[user]['botMsg'].delete()
+                        if hmwComplete and self.hmwManager.deleteHmw(user.id, reaction.message.channel.id):
+                            for userMsg in self.hmwChecker[user]['userMsgList']:
+                                await userMsg.delete()
+                            del self.hmwChecker[user]
+
                     botMsg = await reaction.message.channel.send(newMsg)
 
                     if user in self.hmwChecker:
-                        self.hmwChecker[user] = botMsg
+                        self.hmwChecker[user]['botMsg'] = botMsg
 
                     for emoji in emojis:
                         await botMsg.add_reaction(emoji)
@@ -207,16 +235,22 @@ class SchoolBot(commands.Cog):
     --> listage, ajout, modification, suppression"""
     @commands.command(description=homeworkDesc, name='homework', aliases=['devoir', 'hmw', 'devoirs'])
     async def hmwList(self, ctx):
-        (formatedHmwList, emojis) = self.hmwManager.listHmw()
+        userAuthorized = self.userRoleCheck(ctx.author.roles)
+        (formatedHmwList, emojis) = self.hmwManager.listHmw(userAuthorized)
         
         # Sending the msg
         hmwListMsg  = await ctx.send(formatedHmwList)
         
-        # Add managing reactions to it
-        for hmwEmoji in emojis:
-            await hmwListMsg.add_reaction(hmwEmoji)
+        if userAuthorized:
+            # Add managing reactions to it
+            for hmwEmoji in emojis:
+                await hmwListMsg.add_reaction(hmwEmoji)
 
-        self.hmwChecker[ctx.author] = hmwListMsg
+            self.hmwChecker[ctx.author] = {
+                'botMsg': hmwListMsg,
+                'userMsgList': [ctx.message]
+            }
+            
 
 def setup(schoolBot):
     schoolBot.add_cog(SchoolBot(schoolBot))
