@@ -23,108 +23,99 @@ class Test(commands.Cog):
         self.hmw_selection = ""
         self.correction_selec = ""
 
-    @commands.command()
-    async def ping(self, ctx):
-        await ctx.send("Un ping inutile into vexation into mise en 'ne pas deranger'")
-        await self.bot.change_presence(status=discord.Status.dnd)
+    async def hmw_table_img_creation(self, subject):
+        all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': datetime.datetime.now()}}))
+        if len(all_hmw) == 0:
+            return
+        all_std = list(self.db.eleve.find())
 
-    @commands.command()
-    async def hmw_msg_verifier(self, ctx):
-        start = time.time()
+        # Creation of the excel document
+        workbook = xlsxwriter.Workbook(("Hmw_tables/" + (subject +" .xlsx")))
+        worksheet = workbook.add_worksheet()
 
-        async def hmw_table_img_creation(subject):
-            all_hmw = list(self.db.devoir.find({'subject':subject}))
-            if len(all_hmw) == 0:
-                return
-            all_std = list(self.db.eleve.find())
+        # Formats
+        hmw_format = workbook.add_format({"bg_color": "#70AD47", "align": "center", "border": 1})
+        corrected_format = workbook.add_format({"bg_color": "#FF6347", "align": "right", "border": 1})
+        sended_format = workbook.add_format({"bg_color": "#A9D08E", "align": "right", "border": 1})
+        not_sended_format = workbook.add_format({"bg_color": "#a19e9e", "align": "right", "border": 1, "font_color": "#3e3e3e", "italic": "true"})
+        std_header_format = workbook.add_format({"bg_color": "#5B9BD5", "align": "justify", "border": 1})
+        std_format = workbook.add_format({"bg_color": "#9BC2E6", "align": "justify", "border": 1})
 
-            # Creation of the excel document
-            workbook = xlsxwriter.Workbook(("Hmw_tables/" + (subject +" .xlsx")))
-            worksheet = workbook.add_worksheet()
+        # cells width
+        worksheet.set_column("A:A", 20)
+        worksheet.set_column("B:ZZ", 22)
 
-            # Formats
-            hmw_format = workbook.add_format({"bg_color": "#70AD47", "align": "right", "border": 1})
-            recv_header_format = workbook.add_format({"bg_color": "#70AD47", "align": "justify", "border": 1})
-            sended_format = workbook.add_format({"bg_color": "#A9D08E", "align": "right", "border": 1})
-            not_sended_format = workbook.add_format({"bg_color": "#a19e9e", "align": "right", "border": 1, "font_color": "#3e3e3e", "italic": "true"})
-            std_header_format = workbook.add_format({"bg_color": "#5B9BD5", "align": "justify", "border": 1})
-            std_format = workbook.add_format({"bg_color": "#9BC2E6", "align": "justify", "border": 1})
+        row = 0
+        col = 0
 
-            # cells width
-            worksheet.set_column("A:A", 20)
-            worksheet.set_column("B:ZZ", 22)
+        # Table creation
+        for hmw in all_hmw:
+            col+=1
+            worksheet.write(row, col, hmw["name"], hmw_format)
 
+        col = 0
+        worksheet.write(row, 0, "Élèves", std_header_format)
 
-            row = 0
+        for std in all_std:
             col = 0
-
-            # Table creation
+            row += 1
+            worksheet.write(row, col, std['name'], std_format)
             for hmw in all_hmw:
                 col+=1
-                worksheet.write(row, col, hmw["name"], hmw_format)
+                if len(list(self.db.student_hmw.find({'student_id':std["student_id"]}))) == 0 or len(list(self.db.student_hmw.find({'hmw_name': hmw['name']}))) == 0:
+                    worksheet.write(row, col, "Non rendu", not_sended_format)
+                elif len(list(self.db.student_hmw.find({'hmw_status':"Corrigé", 'student_id':std["student_id"], 'hmw_name': hmw['name']}))) > 0:
+                    worksheet.write(row, col, "Corrigé", corrected_format)
+                else:
+                    # GERER LA DATE
+                    worksheet.write(row, col, ("le 05/16 à 11h53"), sended_format)
 
-            col = 0
-            worksheet.write(row, 0, "Élèves", std_header_format)
+        #for each_row in range(0, row):
+        #    worksheet.set_row(each_row, 20)
 
-            for std in all_std:
-                col = 0
-                row += 1
-                worksheet.write(row, col, std['name'], std_format)
-                for hmw in all_hmw:
-                    col+=1
-                    if len(list(self.db.student_hmw.find({'student_id':std["student_id"]}))) == 0 or len(list(self.db.student_hmw.find({'hmw_name': hmw['name']}))) == 0:
-                        worksheet.write(row, col, "Non rendu", not_sended_format)
-                    else:
-                        # GERER LA DATE
-                        worksheet.write(row, col, ("le 05/16 à 11h53"), sended_format)
+        workbook.close()
+        excel2img.export_img(("Hmw_tables/" + (subject +" .xlsx")), ("Hmw_tables/" + (subject + ".png")))
 
-            #for each_row in range(0, row):
-            #    worksheet.set_row(each_row, 20)
+    async def msg_embed_creation(self, state, subject):
+        try:
+            img_chan = self.bot.get_channel(708658324614283365)
+            subject_recv_chan = self.bot.get_channel(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'])
+            with open(f"Hmw_tables/{subject}.png", 'rb') as table_img:
+                table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
+            embed = discord.Embed()
+            embed.set_image(url=table_img_msg.attachments[0].url)
 
-            workbook.close()
-            excel2img.export_img(("Hmw_tables/" + (subject +" .xlsx")), ("Hmw_tables/" + (subject + ".png")))
+            if state == "create":
+                embed_msg = await subject_recv_chan.send(embed=embed)
+                hmw_table = {
+                    'subject': subject,
+                    'recv_chan_id': self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'],
+                    'img_gathering_id': 708658324614283365,
+                    'embed_id': embed_msg.id
+                }
+                self.db.hmw_table.insert_one(hmw_table)
+            elif state == 'update':
+                embed_msg = await subject_recv_chan.fetch_message(self.db.hmw_table.find({'subject':subject})[0]['embed_id'])
+                embed_msg = await embed_msg.edit(embed=embed)
+        except Exception as e:
+            print(e)
+            pass
 
-
-        async def msg_embed_creation(state, subject):
-            try:
-                img_chan = self.bot.get_channel(708658324614283365)
-                subject_recv_chan = self.bot.get_channel(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'])
-                with open(f"Hmw_tables/{subject}.png", 'rb') as table_img:
-                    table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
-                embed = discord.Embed()
-                embed.set_image(url=table_img_msg.attachments[0].url)
-
-                if state == "create":
-                    embed_msg = await subject_recv_chan.send(embed=embed)
-                    hmw_table = {
-                        'subject': subject,
-                        'recv_chan_id': self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'],
-                        'img_gathering_id': 708658324614283365,
-                        'embed_id': embed_msg.id
-                    }
-                    self.db.hmw_table.insert_one(hmw_table)
-                elif state == 'update':
-                    embed_msg = await subject_recv_chan.fetch_message(self.db.hmw_table.find({'subject':subject})[0]['embed_id'])
-                    embed_msg = await embed_msg.edit(embed=embed)
-            except Exception as e:
-                print(e)
-                pass
-
-
-        all_subjects = []
-        for subject in self.db.send_recv_channels.find():
-            all_subjects.append(subject['subject'])
-        for subject in all_subjects:
-            if len(list(self.db.hmw_table.find({"subject":subject}))) != 0:
-                await hmw_table_img_creation(subject)
-                await msg_embed_creation('update', subject)
-            else:
-                await hmw_table_img_creation(subject)
-                await msg_embed_creation('create', subject)
-
+    async def hmw_msg_verifier(self, subject, *infos):
+        start = time.time()
+        if len(list(self.db.hmw_table.find({"subject":subject}))) != 0:
+            ##if len(list(self.db.student_hmw.find({"student_id":list(infos)[0], "hmw_name":list(infos)[1]}))) == 1:
+            await self.hmw_table_img_creation(subject)
+            await self.msg_embed_creation('update', subject)
+        else:
+            await self.hmw_table_img_creation(subject)
+            await self.msg_embed_creation('create', subject)
 
         print("got there : ", time.time() - start)
 
+    @commands.command()
+    async def test(self, ctx):
+        await self.hmw_msg_verifier()
 
     @commands.command()
     async def send(self, ctx):
@@ -235,8 +226,10 @@ class Test(commands.Cog):
         }
         self.db.appending_msg.insert_one(msg)
 
+
+    ## BLOQUER AUX CHANNELS RECEPTIONS
     @commands.has_any_role(696433108253409371, 696433108253409373)
-    @commands.command(aliases=['corection','corrections','corections','corecttion','corecttions'])
+    @commands.command(aliases=['corection','corrections','corections','corecttion','corecttions','corriger'])
     async def correction(self, ctx, *complement):
         def check_reaction(reaction, user):
             if user == ctx.message.author and reaction.message.id == self.correction_selec.id:
@@ -251,6 +244,8 @@ class Test(commands.Cog):
             try:
                 name = list(complement)[0].lower()
                 student_obj = self.db.eleve.find({'name': name})[0]
+                subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+
                 url = ctx.message.attachments[0].url
                 filename = ctx.message.attachments[0].filename
                 async with aiohttp.ClientSession() as session:
@@ -259,33 +254,59 @@ class Test(commands.Cog):
                         file = await resp.read()
                 #file = await ctx.message.attachments[0].to_file()
                 #await ctx.message.delete()
-                sending_choice = f"""<@{ctx.message.author.id}>```
-Voulez vous :
-    {self.db.emoji.find({'name':"1"})[0]['value']} : Envoyer le fichier tout de suite
-    {self.db.emoji.find({'name':"2"})[0]['value']} : Conserver le fichier pour un envoi groupé
-```"""
-                self.correction_selec = await ctx.message.channel.send(sending_choice)
-                for react in range(1, 3):
-                    await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(react)})[0]['value'])
-                reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
-                await self.correction_selec.delete()
-                if str(reaction) == self.db.emoji.find({'name':'1'})[0]['value']:
-                    student = self.bot.get_user(int(student_obj['student_id']))
-                    added_msg = ""
+                student = self.bot.get_user(int(student_obj['student_id']))
+                added_msg = ""
+                # Demander devoir
+                student_sended_hmw = self.db.student_hmw.find({"student_id":student.id, 'subject': self.db.send_recv_channels.find({'chan_recv_id': ctx.message.channel.id})[0]['subject'], 'hmw_status':'Rendu'})
+                all_sended_hmw = []
+
+                for hmw_sended in student_sended_hmw:
+                    all_sended_hmw.append(hmw_sended)
+
+                if len(all_sended_hmw) == 0:
+                    self.correction_selec = await ctx.channel.send(f"""```
+Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de même envoyer votre fichier ?
+        - {self.db.emoji.find({'name': str(1)})[0]['value']} : Oui
+        - {self.db.emoji.find({'name': str(2)})[0]['value']} : Non             
+                    ```""")
+                    await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(1)})[0]['value'])
+                    await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(2)})[0]['value'])
+                    reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                    await self.correction_selec.delete()
+                    if self.db.emoji.find({'value': str(reaction)})[0]["name"] == "1":
+                        async with ctx.message.channel.typing():
+                            await student.send(content=f"{subject} : {ctx.message.author.nick} vous a envoyé cette correction : \n {added_msg}", file=discord.File(fp=io.BytesIO(file), filename=filename))
+                            self.correction_selec = await ctx.send(content=f"<@{ctx.message.author.id}>, le message a bien été envoyé à {name}")
+                            await asyncio.sleep(15)
+                            await self.correction_selec.delete()
+                    else:
+                        self.correction_selec = await ctx.channel.send("La commande a été annulée")
+                        await asyncio.sleep(10)
+                        await self.correction_selec.delete()
+                        return
+                else:
+                    which_hmw = "```A quel devoir appartient cette correction ?\n"
+                    for nb in range(0, len(all_sended_hmw)):
+                        which_hmw += f"{self.db.emoji.find({'name': str(nb+1)})[0]['value']} : {all_sended_hmw[nb]['hmw_name']}\n"
+                    self.correction_selec = await ctx.message.channel.send(which_hmw+'```')
+
+                    for nb in range(0, len(all_sended_hmw)):
+                        await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(nb+1)})[0]['value'])
+                    reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                    await self.correction_selec.delete()
+                    hmw = all_sended_hmw[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
+                    print(hmw['hmw_name'])
                     if len(complement) > 1:
                         for i in range(1, len(complement)):
                             added_msg += complement[i] + " "
-                    teacher_name = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
                     async with ctx.message.channel.typing():
-                        await student.send(content=f"{teacher_name} : {ctx.message.author.nick} vous a envoyé cette correction : \n {added_msg}", file=discord.File(fp=io.BytesIO(file), filename=filename))
+                        await student.send(content=f"{subject} : {ctx.message.author.nick} vous a envoyé la correction de {hmw['hmw_name']} : \n {added_msg}", file=discord.File(fp=io.BytesIO(file), filename=filename))
+                        #self.db.student_hmw.find({'hmw_status'})
+                        self.db.student_hmw.find_and_modify(query={"student_id":student.id, 'hmw_name': hmw['hmw_name']}, update={"$set": {'hmw_status': "Corrigé"}})
+                        await self.hmw_msg_verifier(subject)
                         self.correction_selec = await ctx.send(content=f"<@{ctx.message.author.id}>, le message a bien été envoyé à {name}")
-                    await asyncio.sleep(30)
-                    await self.correction_selec.delete()
-                elif str(reaction) == self.db.emoji.find({'name':'2'})[0]['value']:
-                    self.correction_selec = await ctx.message.channel.send("Cette fonction n'a pas encore été implémentée !")
                     await asyncio.sleep(15)
                     await self.correction_selec.delete()
-                    return
             except Exception as e:
                 if str(e) == "list index out of range":
                     await ctx.channel.send("Veuillez recommencer en attachant un fichier à votre message.")
@@ -479,72 +500,28 @@ Voulez vous :
                     'student_id': message.author.id,
                     'subject': hmw_list[int(reaction_nb)-1][0],
                     'hmw_name': hmw_list[int(reaction_nb)-1][1],
+                    'hmw_status': "Rendu",
                     'sending_date': datetime.datetime.utcnow(),
                     'message': message.content,
                     'filename': filename_list,
                     'file': file_list
                 }
                 self.db.student_hmw.insert_one(student_hmw)
-
                 ### IMPORTANT : sur la ligne commentée suivante, on voit comment il faut envoyer le fichier !
+                ### METTRE EN PLACE ENVOI DE FICHIER
                 # await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=discord.File(fp=io.BytesIO(buffer), filename=filename))
-                await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
+                confirmation = await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
+                await self.hmw_msg_verifier(hmw_list[int(reaction_nb)-1][0], message.author.id, hmw_list[int(reaction_nb)-1][1])
+                await confirmation.delete()
                 bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
             await asyncio.sleep(30)
             await bot_msg.delete()
+
         except Exception as e:
             if str(e) == "no such item for Cursor instance":
                 return
             else:
                 print(e)
-
-            """
-            OLD VERSION 
-            elif str(e) == "list index out of range":
-                try:
-                    async with message.channel.typing():
-                        await message.delete()
-                        try:
-                            all_hmw = self.homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
-                        except Exception as e:
-                            if str(e) == "no such item for Cursor instance":
-                                await message.channel.send("```Aucun devoir pour cette matière```")
-                            return
-                        hmw_selection = "```Veuillez selectionner le devoir correspondant :\n"
-                        iterator = 0
-                        for hmw in all_hmw:
-                            hmw_list.append([hmw['subject'], hmw['name']])
-                            hmw_selection += f"{self.db.emoji.find({'name': str(iterator)})[0]['value']} -> {hmw['subject']} : {hmw['name']}\n"
-                            iterator += 1
-                        hmw_selection = await message.channel.send(hmw_selection + "```")
-                        for nb in range(0, iterator):
-                            await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
-                    reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
-                    reaction_nb = int(self.db.emoji.find({'value': str(reaction)})[0]['name'])
-                    async with message.channel.typing():
-                        student_hmw = {
-                            'student_id': message.author.id,
-                            'subject': hmw_list[reaction_nb][0],
-                            'hmw_name': hmw_list[reaction_nb][1],
-                            'sending_date': datetime.datetime.utcnow(),
-                            'message': message.content
-                        }
-                        self.db.student_hmw.insert_one(student_hmw)
-                        await recv_chan.send(content=f"{message.author.nick} : a envoyé un message")
-                        bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
-                    await asyncio.sleep(30)
-                    await bot_msg.delete()
-                except asyncio.TimeoutError:
-                    bot_msg = await message.channel.send(f"<@{message.author.id}> Pas de réponse, annulation de l'envoi...")
-                    await asyncio.sleep(15)
-                    await bot_msg.delete()
-                except Exception as e:
-                    if str(e) == "no such item for Cursor instance":
-                        print(e)
-                        return
-                    else:
-                        print(e)
-            """
 
     @commands.has_any_role(696433108253409371, 696433108253409373)
     @commands.Cog.listener('on_message')
