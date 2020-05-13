@@ -60,7 +60,7 @@ class Test(commands.Cog):
         for std in all_std:
             col = 0
             row += 1
-            worksheet.write(row, col, std['name'], std_format)
+            worksheet.write(row, col, std['name'].title(), std_format)
             for hmw in all_hmw:
                 col+=1
                 if len(list(self.db.student_hmw.find({'student_id':std["student_id"], 'hmw_name': hmw['name']}))) == 0:
@@ -267,6 +267,13 @@ class Test(commands.Cog):
             await asyncio.sleep(15)
             await errormsg.delete()
         else:
+            subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+            url = ctx.message.attachments[0].url
+            filename = ctx.message.attachments[0].filename
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as resp:
+                    await ctx.message.delete()
+                    file = await resp.read()
             try:
                 name = list(complement)[0].lower()
                 std_list = []
@@ -277,38 +284,38 @@ class Test(commands.Cog):
                     sensibility = 0.5
                     possibility = get_close_matches(name.lower(), std_list, 3, sensibility)
                     if len(possibility) > 0:
-                        self.correction_selec = f"Input: {name} - {len(possibility)} possibilités"
+                        self.correction_selec = f"L'élève: {name} n'existe pas. S'agit il de :"
                         for i in range(0, len(possibility)):
                         #for poss in possibility:
                             self.correction_selec += f"\n\t{self.db.emoji.find({'name':str(i+1)})[0]['value']}: {possibility[i]} ?"
+                        self.correction_selec += f"\n\t{self.db.emoji.find({'name':'cross'})[0]['value']}: Aucun des {len(possibility)}"
                         self.correction_selec = await ctx.message.channel.send(self.correction_selec)
                         for i in range(0, len(possibility)):
                             await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(i+1)})[0]['value'])
+                        await self.correction_selec.add_reaction(self.db.emoji.find({'name':'cross'})[0]['value'])
                         reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                        await self.correction_selec.delete()
                         try:
-                            if self.db.emoji.find({'value': str(reaction)})[0]["name"] in ["0","1","2","3","4","5","6","7","8","9"]:
-                                print("yes")
+                            if self.db.emoji.find({'value': str(reaction)})[0]["name"] == "cross":
+                                self.correction_selec = await ctx.channel.send("Annulation de la commande..")
+                                await asyncio.sleep(3)
+                                await self.correction_selec.delete()
+                                return
+                            elif self.db.emoji.find({'value': str(reaction)})[0]["name"] in ["0","1","2","3","4","5","6","7","8","9"]:
                                 student_obj = self.db.eleve.find({'name': possibility[int(self.db.emoji.find({'value': str(reaction)})[0]["name"])-1]})[0]
-                                subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
                                 print(f"eleve choisi : {student_obj['name']}")
-                                await self.correction_selec.delete()
                             else:
-                                await self.correction_selec.delete()
-                                await ctx.message.delete()
                                 self.correction_selec = await ctx.channel.send("La commande a été annulée")
                                 await asyncio.sleep(10)
                                 await self.correction_selec.delete()
                                 return
                         except Exception as e:
                             print(e)
-                            await self.correction_selec.delete()
-                            await ctx.message.delete()
                             self.correction_selec = await ctx.channel.send("La commande a été annulée")
                             await asyncio.sleep(10)
                             await self.correction_selec.delete()
                             return
                     else:
-                        await ctx.message.delete()
                         self.correction_selec = await ctx.message.channel.send(f"Input: {name}\n\tAucun élève ne correspond à cette entrée")
                         await asyncio.sleep(15)
                         await self.correction_selec.delete()
@@ -316,12 +323,8 @@ class Test(commands.Cog):
 
                 else:
                     print(f"{name} existe dans la BDD")
-                url = ctx.message.attachments[0].url
-                filename = ctx.message.attachments[0].filename
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url) as resp:
-                        await ctx.message.delete()
-                        file = await resp.read()
+                    student_obj = self.db.eleve.find({'name': name})[0]
+
                 student = self.bot.get_user(int(student_obj['student_id']))
                 added_msg = ""
                 # Demander devoir
