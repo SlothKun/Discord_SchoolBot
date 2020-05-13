@@ -12,6 +12,7 @@ import aiofiles
 import os
 from pathlib import Path
 import xlsxwriter
+from difflib import get_close_matches
 import excel2img
 
 
@@ -62,7 +63,7 @@ class Test(commands.Cog):
             worksheet.write(row, col, std['name'], std_format)
             for hmw in all_hmw:
                 col+=1
-                if len(list(self.db.student_hmw.find({'student_id':std["student_id"]}))) == 0 or len(list(self.db.student_hmw.find({'hmw_name': hmw['name']}))) == 0:
+                if len(list(self.db.student_hmw.find({'student_id':std["student_id"], 'hmw_name': hmw['name']}))) == 0:
                     worksheet.write(row, col, "Non rendu", not_sended_format)
                 elif len(list(self.db.student_hmw.find({'hmw_status':"Corrigé", 'student_id':std["student_id"], 'hmw_name': hmw['name']}))) > 0:
                     worksheet.write(row, col, "Corrigé", corrected_format)
@@ -114,21 +115,14 @@ class Test(commands.Cog):
         print("got there : ", time.time() - start)
 
     @commands.command()
-    async def test(self, ctx):
-        await self.hmw_msg_verifier()
+    async def force_table_verifier(self, ctx, subject):
+        await self.hmw_msg_verifier(subject)
 
     @commands.command()
-    async def send(self, ctx):
-        embed = discord.Embed()
-        embed.set_image(url="https://cdn.discordapp.com/attachments/696433108253409377/708111834099744768/image1.png")
-        await ctx.send(embed=embed)
-
-    @commands.command()
-    async def modify(self, ctx, id, url):
-        msg = await ctx.channel.fetch_message(id)
-        embed = discord.Embed()
-        embed.set_image(url=url)
-        await msg.edit(content="modification !", embed=embed)
+    async def ping(self, ctx):
+        pong = await ctx.message.channel.send("Pong !")
+        await asyncio.sleep(15)
+        await pong.delete()
 
     @commands.command(aliases=['eleve','élève','élèves','éleve','éleves','elève','elèves'])
     async def eleves(self, ctx):
@@ -227,6 +221,36 @@ class Test(commands.Cog):
         self.db.appending_msg.insert_one(msg)
 
 
+
+
+
+    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.command()
+    async def sensicheck(self, ctx, name):
+        if ctx.message.author == self.bot.user:
+            return
+        std_list = []
+        all_std = self.db.eleve.find()
+        print(all_std)
+        for std in all_std:
+            std_list.append(std['name'])
+        print(std_list)
+        if name.lower() not in std_list:
+            for sensibility in range(40, 60, 5):
+                sensibility = sensibility / 100
+                possibility = get_close_matches(name.lower(), std_list, 3, sensibility)
+                if len(possibility) > 0:
+                    res = f"Sensibilité {sensibility} - Input: {name} - {len(possibility)} possibilités"
+                    for poss in possibility:
+                        res += f"\n\tVoulez-vous dire: {poss} ?"
+                else:
+                    res = f"Sensibilité {sensibility} - Input: {name}\n\tAucune matière ne correspond à cette entrée"
+                await ctx.message.channel.send(res)
+        else:
+            await ctx.message.channel.send(f"Matière `{name}` existe en BDD")
+
+
+
     ## BLOQUER AUX CHANNELS RECEPTIONS
     @commands.has_any_role(696433108253409371, 696433108253409373)
     @commands.command(aliases=['corection','corrections','corections','corecttion','corecttions','corriger'])
@@ -239,21 +263,65 @@ class Test(commands.Cog):
                 return reaction, user
 
         if len(complement) == 0:
-            await ctx.send("Veuillez recommencer en respectant le format suivant : '!correction nom_de_leleve' avec votre fichier attaché à votre message")
+            errormsg = await ctx.send("Veuillez recommencer en respectant le format suivant : '!correction nom_de_leleve' avec votre fichier attaché à votre message")
+            await asyncio.sleep(15)
+            await errormsg.delete()
         else:
             try:
                 name = list(complement)[0].lower()
-                student_obj = self.db.eleve.find({'name': name})[0]
-                subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+                std_list = []
+                all_std = self.db.eleve.find()
+                for std in all_std:
+                    std_list.append(std['name'])
+                if name not in std_list:
+                    sensibility = 0.5
+                    possibility = get_close_matches(name.lower(), std_list, 3, sensibility)
+                    if len(possibility) > 0:
+                        self.correction_selec = f"Input: {name} - {len(possibility)} possibilités"
+                        for i in range(0, len(possibility)):
+                        #for poss in possibility:
+                            self.correction_selec += f"\n\t{self.db.emoji.find({'name':str(i+1)})[0]['value']}: {possibility[i]} ?"
+                        self.correction_selec = await ctx.message.channel.send(self.correction_selec)
+                        for i in range(0, len(possibility)):
+                            await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(i+1)})[0]['value'])
+                        reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
+                        try:
+                            if self.db.emoji.find({'value': str(reaction)})[0]["name"] in ["0","1","2","3","4","5","6","7","8","9"]:
+                                print("yes")
+                                student_obj = self.db.eleve.find({'name': possibility[int(self.db.emoji.find({'value': str(reaction)})[0]["name"])-1]})[0]
+                                subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+                                print(f"eleve choisi : {student_obj['name']}")
+                                await self.correction_selec.delete()
+                            else:
+                                await self.correction_selec.delete()
+                                await ctx.message.delete()
+                                self.correction_selec = await ctx.channel.send("La commande a été annulée")
+                                await asyncio.sleep(10)
+                                await self.correction_selec.delete()
+                                return
+                        except Exception as e:
+                            print(e)
+                            await self.correction_selec.delete()
+                            await ctx.message.delete()
+                            self.correction_selec = await ctx.channel.send("La commande a été annulée")
+                            await asyncio.sleep(10)
+                            await self.correction_selec.delete()
+                            return
+                    else:
+                        await ctx.message.delete()
+                        self.correction_selec = await ctx.message.channel.send(f"Input: {name}\n\tAucun élève ne correspond à cette entrée")
+                        await asyncio.sleep(15)
+                        await self.correction_selec.delete()
+                        return
 
+                else:
+                    print(f"{name} existe dans la BDD")
                 url = ctx.message.attachments[0].url
                 filename = ctx.message.attachments[0].filename
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url) as resp:
                         await ctx.message.delete()
                         file = await resp.read()
-                #file = await ctx.message.attachments[0].to_file()
-                #await ctx.message.delete()
                 student = self.bot.get_user(int(student_obj['student_id']))
                 added_msg = ""
                 # Demander devoir
@@ -286,15 +354,23 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         return
                 else:
                     which_hmw = "```A quel devoir appartient cette correction ?\n"
+                    printed = []
+                    newhmwlist = []
+                    print(all_sended_hmw)
+                    print(type(all_sended_hmw))
                     for nb in range(0, len(all_sended_hmw)):
-                        which_hmw += f"{self.db.emoji.find({'name': str(nb+1)})[0]['value']} : {all_sended_hmw[nb]['hmw_name']}\n"
+                        if all_sended_hmw[nb]['hmw_name'] not in printed:
+                            which_hmw += f"{self.db.emoji.find({'name': str(nb+1)})[0]['value']} : {all_sended_hmw[nb]['hmw_name']}\n"
+                            printed.append(all_sended_hmw[nb]['hmw_name'])
+                            newhmwlist.append(all_sended_hmw[nb])
                     self.correction_selec = await ctx.message.channel.send(which_hmw+'```')
-
-                    for nb in range(0, len(all_sended_hmw)):
+                    print("printed : ", printed)
+                    for nb in range(0, len(printed)):
                         await self.correction_selec.add_reaction(self.db.emoji.find({'name':str(nb+1)})[0]['value'])
                     reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check_reaction)
                     await self.correction_selec.delete()
-                    hmw = all_sended_hmw[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
+                    hmw = newhmwlist[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
+
                     print(hmw['hmw_name'])
                     if len(complement) > 1:
                         for i in range(1, len(complement)):
@@ -311,8 +387,10 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 if str(e) == "list index out of range":
                     await ctx.channel.send("Veuillez recommencer en attachant un fichier à votre message.")
                 elif str(e) == "no such item for Cursor instance":
-                    await ctx.channel.send("L'élève n'a pas été trouvé, assurez vous que vous avez bien respecté le nom de l'élève donné dans la liste des élèves accessible grâce à la commande !eleves")
-                    await ctx.channel.send("deux eleves seulement : sloth, skido ;)")
+                    errormsg = await ctx.channel.send("L'élève n'a pas été trouvé, assurez vous que vous avez bien respecté le nom de l'élève donné dans la liste des élèves accessible grâce à la commande !eleves")
+                    await asyncio.sleep(15)
+                    await errormsg.delete()
+                    #await ctx.channel.send("deux eleves seulement : sloth, skido ;)")
                 else:
                     print(e)
 
@@ -362,8 +440,9 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 print(e)
                 print(type(e))
                 if str(e).startswith("invalid literal for int() with base 10:"):
-                    await ctx.send("Veuillez s'il vous plait entrer un nombre entre 2 et 10.")
-                    return
+                    errormsg = await ctx.send("Veuillez s'il vous plait entrer un nombre entre 2 et 10.")
+                    await asyncio.sleep(15)
+                    await errormsg.delete()
 
 
 
@@ -476,14 +555,14 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 all_hmw = await homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
                 if len(all_hmw) == 0:
                     return
-                #print("all hmw hf : ", all_hmw)
-                #print("all hmw hf len : ", len(all_hmw))
+
                 hmw_list, reaction_nb = await homework_printing(1, 0, 5, all_hmw)
             except Exception as e:
                 if str(e) == "no such item for Cursor instance":
                     print(e)
-                    print("we're here")
-                    await message.channel.send("```Aucun devoir pour cette matière```")
+                    errormsg = await message.channel.send("```Aucun devoir pour cette matière```")
+                    await asyncio.sleep(15)
+                    await errormsg.delete()
                     return
                 else:
                     if str(e) == "cannot unpack non-iterable NoneType object":
