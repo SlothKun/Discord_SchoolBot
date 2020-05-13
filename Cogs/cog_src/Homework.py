@@ -1,5 +1,6 @@
 import datetime
 from string import Template
+from difflib import get_close_matches
 
 class HomeworkMessage():
     HMW_UTILS = {
@@ -19,7 +20,10 @@ class HomeworkMessage():
         "name": Template("Veuillez préciser la date limite du devoir que vous souhaitez créer \n\tLe format de la date doit être le suivant '$dateFormat' - ex: $dateExample"),
         "date": Template("Veuillez préciser le statut du devoir que vous souhaitez créer \n\t - ex: 'À rendre', 'Obligatoire'"),
         "status": Template("Veuillez préciser la matière du devoir que vous souhaitez créer \n\t - ex: 'Mathématiques', 'Physique'"),
-        "subject": Template("$hmwRecap")
+        "subject": Template("$hmwRecap"),
+
+        "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
+        "subjectChoiceReac": Template("\n\tUtilisez la réaction $reac pour sélectionner la matiere '$subject'"),
     }
 
     HMW_EDIT = {}
@@ -43,21 +47,21 @@ class HomeworkMessage():
     }
 
     @classmethod
-    def addHmwBoxBuilder(cls, hmwState, emojis):
-        res = [HomeworkMessage.HMW_UTILS['formatingQuote']]
-        res.append(HomeworkMessage.HMW_ADD[hmwState])
-        res.append(HomeworkMessage.HMW_UTILS['separationLine'])
-        for emoji in emojis:
-            if emoji == "cancel":
-                res.append(HomeworkMessage.HMW_UTILS['cancelOption'])
-            elif emoji == "back":
-                res.append(HomeworkMessage.HMW_UTILS['backOption'])
-            elif emoji == "addFile":
-                res.append(HomeworkMessage.HMW_UTILS['addFileOption'])
-            elif emoji == "modifConf":
-                res.append(HomeworkMessage.HMW_UTILS['hmwModifConf'])
-        res.append(HomeworkMessage.HMW_UTILS['formatingQuote'])
+    def stateDisplayer(cls, stateNum):
+        stateFR = ['Nom', 'Date', 'Statut', 'Matiere', 'Document']
+        if stateNum == 0:
+            res = "**" + stateFR[0] + "** - "
+            res += ' - '.join(stateFR[1:])
+            return res
+        elif stateNum == (len(stateFR) - 1):
+            res = ' - '.join(stateFR[0:-1])
+            res += " - **" + stateFR[-1] + "**"
+            return res
+        res = ' - '.join(stateFR[0:(stateNum)])
+        res += " - **" + stateFR[stateNum] + "** - "
+        res += ' - '.join(stateFR[(stateNum + 1):])
         return res
+        
 
 class Homework():
 
@@ -73,7 +77,9 @@ class Homework():
         "hmwDelete": "suppression"
     }
 
-    def __init__(self, creator, userAction, observerFunc):
+    WORD_SENSIBILITY = 0.35
+
+    def __init__(self, creator, userAction, observerFunc, subjectList):
         self._creator = creator
         self._creationDate = datetime.datetime.utcnow()
         self._observer = observerFunc
@@ -91,6 +97,9 @@ class Homework():
         self._status = None
         self._subject = None
 
+        self.subjectDBList = subjectList
+        self.subjectChoice = []
+
     def __str__(self):
         desc = f"Devoir de {self.subject} : {self.name}\nStatut : {self.status}\nPour le {self.date.strftime('%d %B %Y')}"
         if len(self.doc) > 0:
@@ -98,7 +107,7 @@ class Homework():
             for doc in self.doc:
                 desc += f"\t*{doc.filename}*"
         else:
-            desc += "\nAucun document associé"
+            desc += "\nAucun document associé\n\tSi vous souhaitez lier un document à ce devoir, utiliser la réaction correspondante ci-dessous"
         return desc
 
     def hmwDict(self):
@@ -243,7 +252,7 @@ class Homework():
             # del self.lastChange.split('\n')[-1]
             self.state = Homework.HMW_STATES[self.userAction][max(0, Homework.HMW_STATES[self.userAction].index(self.state) - 1)]
         else:
-            self.state = Homework.HMW_STATES[self.userAction][min(len(Homework.HMW_STATES[self.userAction]), Homework.HMW_STATES[self.userAction].index(self.state) + 1)]
+            self.state = Homework.HMW_STATES[self.userAction][min((len(Homework.HMW_STATES[self.userAction]) - 1), Homework.HMW_STATES[self.userAction].index(self.state) + 1)]
     
     def updateVal(self, value, isBack):
         res = None
@@ -304,10 +313,31 @@ class Homework():
                 res = res.substitute()
             elif self.state == Homework.HMW_STATES[self.userAction][4]:
                 #Subject
-                self.subject = value
-                res = res.substitute(hmwRecap = self)
-                self.isComplete = True
-                self._observer(self.id, self.isDocNeeded())
+                if value in self.subjectDBList:
+                    # Subject input exist in DB
+                    self.subject = value
+                    res = res.substitute(hmwRecap = self)
+                    self.isComplete = True
+                    self._observer(self.id, self.isDocNeeded())
+                else:
+                    # Subjet input doesn't exist in DB
+                    self.subjectChoice = get_close_matches(value, self.subjectDBList, 2, Homework.WORD_SENSIBILITY)
+                    if len(self.subjectChoice) > 0:
+                        # Found at least one possibility possibility
+                        if len(self.subjectChoice) > 1:
+                            self.lastError = f"Matière '{value}' non renseignée, mais {len(self.subjectChoice)} possibilités existent: {', '.join(self.subjectChoice)} "
+                        else:
+                            self.lastError = f"Matière '{value}' non renseignée, mais {len(self.subjectChoice)} possibilité existe : {self.subjectChoice[0]}"
+                        self.lastChange = HomeworkMessage.HMW_CONF["wrongAction"].substitute(errorMsg = self.lastError)
+                        res = HomeworkMessage.HMW_ADD["subjectChoice"].substitute()
+                    else:
+                        # No matching subject for this input
+                        self.lastError = f"Aucune matière renseignée ne correspond à l'entrée '{value}'. Liste des matières renseignées:\n{', '.join(self.subjectDBList)}"
+                        self.lastChange = HomeworkMessage.HMW_CONF["wrongAction"].substitute(errorMsg = self.lastError)
+                        self.subject = None
+                        self.updateState(True)
+                        res = HomeworkMessage.HMW_ADD[self.state].substitute()
+                    return (False, res)
             self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = value)
         return (True, res)
     
@@ -318,4 +348,17 @@ class Homework():
             res = res.substitute(dateFormat = 'AAAA-MM-JJ', dateExample = datetime.datetime.now().strftime('%Y-%m-%d'))
         else:
             res = res.substitute()
+        return res
+
+    def setNewVal(self, voteIdx):
+        res = ""
+        if voteIdx < len(self.subjectChoice):
+            if self.state == Homework.HMW_STATES[self.userAction][4]:
+                self.subject = self.subjectChoice[voteIdx]
+                res = HomeworkMessage.HMW_ADD[self.state].substitute(hmwRecap = self)
+                self.isComplete = True
+                self._observer(self.id, self.isDocNeeded())
+                self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.subjectChoice[voteIdx])
+        else:
+            pass
         return res

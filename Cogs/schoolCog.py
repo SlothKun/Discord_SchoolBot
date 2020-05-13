@@ -3,6 +3,8 @@ from discord.ext import commands
 
 from pymongo import MongoClient
 from asyncio import sleep
+from difflib import get_close_matches
+
 import datetime
 import locale
 import json
@@ -11,7 +13,7 @@ from .cog_src.HomeworkManager import HomeworkManager
 from .cog_src.Homework import Homework
 
 class SchoolBot(commands.Cog):
-    MAX_REACTION_TIME = 30 #30 seconds
+    MAX_REACTION_TIME = 60 #60 seconds
 
     def __init__(self, schoolBot):
         super().__init__()
@@ -41,6 +43,32 @@ class SchoolBot(commands.Cog):
         # Dict to keep track of people accessing the hmw
         self.hmwChecker = {}
 
+        # Emojis element from DB
+        reactDB = self.mDB[self.dbStruct['db_collections']['emoji']]
+
+        utilityField = self.dbStruct['db_collections']['emoji_fields']['utility']
+        idField = self.dbStruct['db_collections']['emoji_fields']['id']
+        nameField = self.dbStruct['db_collections']['emoji_fields']['name']
+        valueField = self.dbStruct['db_collections']['emoji_fields']['value']
+
+        self.hmwManagementEmojis = {}
+        self.hmwConfEmojis = {}
+        self.numberEmojis = []
+
+        self.hmwManagementEmojis["newHmwEmoji"] = reactDB.find_one({nameField: 'add'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwManagementEmojis["editHmwEmoji"] = reactDB.find_one({nameField: 'edit'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwManagementEmojis["delHmwEmoji"] = reactDB.find_one({nameField: 'delete'}, {idField: 0, valueField: 1})[valueField]
+
+        self.hmwConfEmojis["checkEmoji"] = reactDB.find_one({nameField: 'check'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwConfEmojis["crossEmoji"] = reactDB.find_one({nameField: 'cross'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwConfEmojis["backEmoji"] = reactDB.find_one({nameField: 'back'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwConfEmojis["validHmwEmoji"] = reactDB.find_one({nameField: 'confModif'}, {idField: 0, valueField: 1})[valueField]
+
+        for numberEmoji in reactDB.find({utilityField: 'number'}, {idField: 0, nameField:1, valueField:1}):
+            self.numberEmojis.append(numberEmoji[valueField])
+
+        # self.schoolSubject = ['mathématiques', 'spe-math','physique-chimie', 'si-mecanique', 'si-electronique', 'isn', 'svt', 'philo', 'anglais', 'espagnol', 'allemand', 'section-euro', ]
+
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -66,6 +94,18 @@ class SchoolBot(commands.Cog):
     async def messageListener(self, message):
         if message.author == self.schoolBot.user:
             return
+
+        # docMatChannelID = int(self.mDB['salon'].find_one({'subject': 'mathématiques'}, {'_id': 0, 'channelID': 1})['channelID'])
+        # docMatChannel = message.channel.guild.get_channel(docMatChannelID)
+
+        
+
+        if len(message.attachments) > 0:
+            # for att in message.attachments:
+            #     attFile = await att.to_file()
+            #     await message.delete()
+            #     await docMatChannel.send(file=attFile)
+            pass
         
         if self.userRoleCheck(message.author.roles) and self.hmwManager.checkHmw(message.author.id, message.channel.id):
             # User have previously created an Homework object and is writing in the same channel
@@ -131,63 +171,47 @@ class SchoolBot(commands.Cog):
             reacTime = (reactionDate - reaction.message.created_at).total_seconds()
             if  reacTime < SchoolBot.MAX_REACTION_TIME:
                 # User reacted within MAX_REACTION_TIME seconds
-                # Emojis element from DB
-                reactDB = self.mDB[self.dbStruct['db_collections']['emoji']]
-
-                utilityField = self.dbStruct['db_collections']['emoji_fields']['utility']
-                idField = self.dbStruct['db_collections']['emoji_fields']['id']
-                nameField = self.dbStruct['db_collections']['emoji_fields']['name']
-                valueField = self.dbStruct['db_collections']['emoji_fields']['value']
-
-                newHmwEmoji = reactDB.find({nameField: 'add'}, {idField: 0, valueField: 1})[0][valueField]
-                editHmwEmoji = reactDB.find({nameField: 'edit'}, {idField: 0, valueField: 1})
-                delHmwEmoji = reactDB.find({nameField: 'delete'}, {idField: 0, valueField: 1})
-
-                checkEmoji = reactDB.find({nameField: 'check'}, {idField: 0, valueField: 1})[0][valueField]
-                crossEmoji = reactDB.find({nameField: 'cross'}, {idField: 0, valueField: 1})[0][valueField]
-                backEmoji = reactDB.find({nameField: 'back'}, {idField: 0, valueField: 1})[0][valueField]
-                validHmwEmoji = reactDB.find({nameField: 'confModif'}, {idField: 0, valueField: 1})[0][valueField]
 
                 newMsg = f"{user.mention}\n"
                 emojis = []
                 userAction = None
                 hmwComplete = False
 
-                if str(reaction) == newHmwEmoji:
+                if str(reaction) == self.hmwManagementEmojis["newHmwEmoji"]:
                     ######## Adding a new homework
                     userAction = "Ajout"
                     newMsg += self.hmwManager.newHmw(user.id, 0, reaction.message.channel.id, reaction.message.id)
-                    emojis.append(crossEmoji)
+                    emojis.append(self.hmwConfEmojis["crossEmoji"])
 
-                elif str(reaction) == editHmwEmoji:
+                elif str(reaction) == self.hmwManagementEmojis["editHmwEmoji"]:
                     ######## Editing an existing homework
                     userAction = "Édition"
                     #TODO: À COMPLÉTER
                     await reaction.message.channel.send("Edition mode is not implemented yet")
 
-                elif str(reaction) == delHmwEmoji:
+                elif str(reaction) == self.hmwManagementEmojis["delHmwEmoji"]:
                     ######## Deleting an existing homework
                     userAction = "Suppression"
                     #TODO: À COMPLÉTER
                     await reaction.message.channel.send("Deletion mode is not implemented yet")
 
-                elif str(reaction) == checkEmoji:
+                elif str(reaction) == self.hmwConfEmojis["checkEmoji"]:
                     ######## Adding a doc to an homework
                     (msgBack, emojis) = self.hmwManager.setDoc(user.id)
                     newMsg += msgBack
 
-                elif str(reaction) == crossEmoji:
+                elif str(reaction) == self.hmwConfEmojis["crossEmoji"]:
                     ######## Cancel homework creation
                     if self.hmwManager.deleteHmw(user.id, reaction.message.channel.id):
                         newMsg += "Devoir en cours de création a été supprimé"
                         del self.hmwChecker[user]
 
-                elif str(reaction) == backEmoji:
+                elif str(reaction) == self.hmwConfEmojis["backEmoji"]:
                     ######## Cancel last modification
                     (msgBack, emojis) = self.hmwManager.updateHmw(user.id, None, True)
                     newMsg += msgBack
 
-                elif str(reaction) == validHmwEmoji:
+                elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
                     ######## Validate new homework and send it to the database
                     hmwDB = self.mDB[self.dbStruct['db_collections']['homework']]
 
@@ -197,10 +221,16 @@ class SchoolBot(commands.Cog):
 
                     homeworks = hmwDB.find({hmwDateField: {'$gte':datetime.datetime.now()}})
 
-                    (msgBack, emojis) = self.hmwManager.insertNewDict(user.id)
+                    (msgBack, emojis) = self.hmwManager.insertNewDict(user.id, self.userRoleCheck(user.roles))
                     newMsg += msgBack
 
                     hmwComplete = True
+
+                elif str(reaction) in self.numberEmojis:
+                    (msgBack, emojis) = self.hmwManager.userVote(user.id, self.numberEmojis.index(str(reaction)))
+                    newMsg += msgBack
+                    #TODO: GÉRER LES EMOJIS À CHIFFRE POUR LA SELECTION DE CHOIX MATIERE POSSIBLE
+                    #TODO: GERER L'AJOUT DE FICHER ET LES ASSOCIER AUX DEVOIRS + LES POUSSER VERS LE SALON APPROPRIÉ
 
                 if newMsg is not None:
                     ######## Sending the new message to the channel + deleting old message
@@ -250,6 +280,45 @@ class SchoolBot(commands.Cog):
                 'botMsg': hmwListMsg,
                 'userMsgList': [ctx.message]
             }
+
+    # @commands.command()
+    # async def createSubject(self, ctx):
+    #     # print('\n')
+    #     subjectCol = self.mDB['matiere']
+    #     chanCol = self.mDB['salon']
+    #     doc_cat_id = "696433109163573254"
+
+    #     allCat = ctx.message.channel.guild.by_category()
+    #     for cat in allCat:
+    #         if cat[0].id == int(doc_cat_id):
+    #             for chan in cat[1]:
+    #                 # print(f"Treating channel {chan.name}")
+    #                 subjectRes = get_close_matches(chan.name[4:-1], self.schoolSubject, 1, 0.45)
+    #                 if len(subjectRes) > 0:
+    #                     subjectName = str(subjectRes[0])
+    #                     # print('\t' + subjectName)
+    #                     subDict = {
+    #                         'subjectName': subjectName
+    #                     }
+    #                     chanDict = {
+    #                         'channelID': str(chan.id),
+    #                         'channelName': str(chan.name),
+    #                         'categoryID': doc_cat_id,
+    #                         'categoryName': cat[0].name,
+    #                         'subject': subjectName
+    #                     }
+
+    #                     existingDBSub = subjectCol.find_one({'subjectName': subjectName}, {'_id': 0, 'subjectName': 1})['subjectName']
+    #                     existingDBChan = chanCol.find_one({'channelID': str(chan.id)}, {'_id': 0, 'channelID': 1})['channelID']
+    #                     if not existingDBSub:
+    #                         subjectCol.insert_one(subDict)
+    #                         await ctx.send(f"Creating subject '{subjectName}' automatically in DB")
+    #                     if not existingDBChan:
+    #                         chanCol.insert_one(chanDict)
+    #                         await ctx.send(f"Creating channel '{chan.name}' automatically in DB")
+    #                 else:
+    #                     await ctx.send(f"Subject not found for channel {chan.name}")
+    #             break
             
 
 def setup(schoolBot):

@@ -53,6 +53,20 @@
             "discordID": "discordID",
             "name": "name",
             "authorized": "botAlteration"
+        },
+        "subject": "matiere",
+        "subject_fields": {
+            "id": "_id",
+            "subjectName": "subjectName"
+        },
+        "channel": "salon",
+        "channel_fields": {
+            "id": "_id",
+            "channelID": "channelID",
+            "channelName": "channelName",
+            "categoryID": "categoryID",
+            "categoryName": "categoryName",
+            "subject": "subject"
         }
     }
 }
