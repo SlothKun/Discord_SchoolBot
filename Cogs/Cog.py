@@ -24,14 +24,32 @@ class Test(commands.Cog):
         self.hmw_selection = ""
         self.correction_selec = ""
 
+    async def homework_date_sorting(self, hmw_list):
+        current_date = datetime.datetime.utcnow()
+        hmw_dict = {}
+        decrement = 1
+        for hmw in hmw_list:
+            if hmw['deadline'] - current_date in hmw_dict:
+                hmw_dict[hmw['deadline'] - current_date - datetime.timedelta(milliseconds=decrement)] = hmw
+                decrement += 1
+            else:
+                hmw_dict[hmw['deadline'] - current_date] = hmw
+        hmw_list = []
+        hmw_dict = sorted(hmw_dict.items())
+        for item, value in hmw_dict:
+            hmw_list.append(value)
+        return hmw_list
+
     async def hmw_table_img_creation(self, subject):
         all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': datetime.datetime.now()}}))
+        all_hmw = await self.homework_date_sorting(all_hmw)
+
         if len(all_hmw) == 0:
             return
         all_std = list(self.db.eleve.find())
 
         # Creation of the excel document
-        workbook = xlsxwriter.Workbook(("Hmw_tables/" + (subject +" .xlsx")))
+        workbook = xlsxwriter.Workbook(("Config/Hmw_tables/" + (subject +".xlsx")))
         worksheet = workbook.add_worksheet()
 
         # Formats
@@ -69,19 +87,23 @@ class Test(commands.Cog):
                     worksheet.write(row, col, "Corrigé", corrected_format)
                 else:
                     # GERER LA DATE
-                    worksheet.write(row, col, ("le 05/16 à 11h53"), sended_format)
+                    deadline = str(self.db.student_hmw.find({'hmw_name': hmw['name'], 'student_id':std["student_id"]})[0]['sending_date'])
+                    date = deadline.split()[0]
+                    formatted_date = f"{date[len(date) -2:]}/{date[-5:-3]}"
+                    hour = deadline.split()[1].split(".")[0][:-3]
+                    worksheet.write(row, col, (f"le {formatted_date} à {hour}"), sended_format)
 
         #for each_row in range(0, row):
         #    worksheet.set_row(each_row, 20)
 
         workbook.close()
-        excel2img.export_img(("Config/Hmw_Tables/" + (subject +" .xlsx")), ("Config/Hmw_Tables/" + (subject + ".png")))
+        excel2img.export_img(("Config/Hmw_Tables/" + (subject +".xlsx")), ("Config/Hmw_Tables/" + (subject + ".png")))
 
     async def msg_embed_creation(self, state, subject):
         try:
             img_chan = self.bot.get_channel(708658324614283365)
             subject_recv_chan = self.bot.get_channel(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'])
-            with open(f"Hmw_tables/{subject}.png", 'rb') as table_img:
+            with open(f"Config/Hmw_tables/{subject}.png", 'rb') as table_img:
                 table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
             embed = discord.Embed()
             embed.set_image(url=table_img_msg.attachments[0].url)
@@ -116,6 +138,7 @@ class Test(commands.Cog):
 
     @commands.command()
     async def force_table_verifier(self, ctx, subject):
+        await ctx.message.delete()
         await self.hmw_msg_verifier(subject)
 
     @commands.command()
@@ -251,10 +274,17 @@ class Test(commands.Cog):
 
 
 
-    ## BLOQUER AUX CHANNELS RECEPTIONS
     @commands.has_any_role(696433108253409371, 696433108253409373)
     @commands.command(aliases=['corection','corrections','corections','corecttion','corecttions','corriger'])
     async def correction(self, ctx, *complement):
+        # Verifie que le message est bien envoyé dans un channel correction
+        if len(list(self.db.send_recv_channels.find({'chan_recv_id':ctx.message.channel.id}))) == 0:
+            await ctx.message.delete()
+            errormsg = await ctx.channel.send("Cette commande n'est utilisable que dans les salons de reception, veuillez réessayer dans le salon correspondant à votre matière.")
+            await asyncio.sleep(15)
+            await errormsg.delete()
+            return
+
         def check_reaction(reaction, user):
             if user == ctx.message.author and reaction.message.id == self.correction_selec.id:
                 print(user)
@@ -286,7 +316,6 @@ class Test(commands.Cog):
                     if len(possibility) > 0:
                         self.correction_selec = f"L'élève: {name} n'existe pas. S'agit il de :"
                         for i in range(0, len(possibility)):
-                        #for poss in possibility:
                             self.correction_selec += f"\n\t{self.db.emoji.find({'name':str(i+1)})[0]['value']}: {possibility[i]} ?"
                         self.correction_selec += f"\n\t{self.db.emoji.find({'name':'cross'})[0]['value']}: Aucun des {len(possibility)}"
                         self.correction_selec = await ctx.message.channel.send(self.correction_selec)
@@ -403,6 +432,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
         msglist = []
         poll_info = {}
         all_propositions = []
+        poll_channel = self.bot.get_channel(696433108559331347)
         if len(kwargs) == 0:
             await ctx.send("Veuillez s'il vous plait préciser le nombre de proposition.")
         else:
@@ -417,7 +447,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     user_msg = await self.bot.wait_for('message', timeout=60)
                     while str(user_msg.author) != str(ctx.author) or str(user_msg.channel) != str(ctx.channel):
                         user_msg = await self.bot.wait_for('message', timeout=60)
-                    complete_string = f"<@&696433108244889722> - Sondage proposé par {ctx.author.nick} :```\n{user_msg.content} \n"
+                    complete_string = f"<@&696433108244889722> - Sondage proposé par {self.db.eleve.find({'student_id':ctx.message.author.id})[0]['name'].title()} :```\n{user_msg.content} \n"
                     poll_info['description'] = user_msg.content
                     msglist.append(user_msg)
                     for i in range(0, nb_proposition):
@@ -429,7 +459,8 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         msglist.append(user_msg)
                         msglist.append(bot_msg)
                         complete_string += (f"\t{self.db.emoji.find({'name':str(i)})[0]['value']} :  {user_msg.content} \n")
-                    bot_msg = await ctx.channel.send(complete_string+"```")
+
+                    bot_msg = await poll_channel.send(complete_string+"```")
                     poll_info['nb_propositions'] = len(all_propositions)
                     poll_info['propositions'] = all_propositions
                     poll_info['published_time'] = datetime.datetime.utcnow()
@@ -441,7 +472,6 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         await msglist[i].delete()
             except Exception as e:
                 print(e)
-                print(type(e))
                 if str(e).startswith("invalid literal for int() with base 10:"):
                     errormsg = await ctx.send("Veuillez s'il vous plait entrer un nombre entre 2 et 10.")
                     await asyncio.sleep(15)
@@ -452,7 +482,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
 ### RECEPTION
 
     @commands.Cog.listener('on_message')
-    async def file_sending(self, message):
+    async def hmw_sending(self, message):
         if message.author == self.bot.user:
             return
 
@@ -463,22 +493,6 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
         def check_reaction(reaction, user):
             if user == message.author and reaction.message.id == self.hmw_selection.id:
                 return reaction, user
-
-        async def homework_date_sorting(hmw_list):
-            current_date = datetime.datetime.utcnow()
-            hmw_dict = {}
-            decrement = 1
-            for hmw in hmw_list:
-                if hmw['deadline'] - current_date in hmw_dict:
-                    hmw_dict[hmw['deadline'] - current_date - datetime.timedelta(milliseconds=decrement)] = hmw
-                    decrement += 1
-                else:
-                    hmw_dict[hmw['deadline'] - current_date] = hmw
-            hmw_list = []
-            hmw_dict = sorted(hmw_dict.items())
-            for item, value in hmw_dict:
-                hmw_list.append(value)
-            return hmw_list
 
         async def homework_printing(page_nb, start, stop, all_hmw):
             async with message.channel.typing():
@@ -555,7 +569,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     if str(e) == "404 Not Found (error code: 10008): Unknown Message":
                         pass
             try:
-                all_hmw = await homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
+                all_hmw = await self.homework_date_sorting(self.db['devoir'].find({'subject': channel_obj['subject']}))
                 if len(all_hmw) == 0:
                     return
 
@@ -576,9 +590,10 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     print("Error homework finding/sorting : ", str(e))
                     return
 
+            std_name = self.db.eleve.find({'student_id':message.author.id})[0]['name']
             async with message.channel.typing():
                 student_hmw = {
-                    'name': str(message.author.nick),
+                    'name': std_name,
                     'student_id': message.author.id,
                     'subject': hmw_list[int(reaction_nb)-1][0],
                     'hmw_name': hmw_list[int(reaction_nb)-1][1],
@@ -592,7 +607,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 ### IMPORTANT : sur la ligne commentée suivante, on voit comment il faut envoyer le fichier !
                 ### METTRE EN PLACE ENVOI DE FICHIER
                 # await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=discord.File(fp=io.BytesIO(buffer), filename=filename))
-                confirmation = await recv_chan.send(content=f"{message.author.nick} : a envoyé un fichier")
+                confirmation = await recv_chan.send(content=f"{std_name.title()} : a envoyé un fichier")
                 await self.hmw_msg_verifier(hmw_list[int(reaction_nb)-1][0], message.author.id, hmw_list[int(reaction_nb)-1][1])
                 await confirmation.delete()
                 bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
