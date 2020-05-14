@@ -1,8 +1,7 @@
 from discord.ext import commands
 import discord
 import os
-
-TOKEN = "NjA3Mzc4MjY2MTY0MDM1NTg0.XpDLug._MJ5Ao8duP32RMcab2NvCZKNT2o"
+import json
 
 bot = commands.Bot(command_prefix='$')
 
@@ -71,4 +70,5 @@ for filename in os.listdir("Cogs/"):
         except commands.NoEntryPointError:
             print(f"Extension {filename[:-3]} can not be loaded")
 
-bot.run(TOKEN)
+with open("Config/Bot_Token.json") as tokenFile:
+    bot.run(json.load(tokenFile)['TOKEN'])

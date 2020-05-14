@@ -75,7 +75,7 @@ class Test(commands.Cog):
         #    worksheet.set_row(each_row, 20)
 
         workbook.close()
-        excel2img.export_img(("Hmw_tables/" + (subject +" .xlsx")), ("Hmw_tables/" + (subject + ".png")))
+        excel2img.export_img(("Config/Hmw_Tables/" + (subject +" .xlsx")), ("Config/Hmw_Tables/" + (subject + ".png")))
 
     async def msg_embed_creation(self, state, subject):
         try:
