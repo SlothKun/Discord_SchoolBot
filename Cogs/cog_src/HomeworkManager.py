@@ -1,4 +1,5 @@
-from .Homework import Homework, HomeworkMessage
+from .Homework import Homework
+from .HomeworkMessage import HomeworkMessage
 
 from string import Template
 from datetime import datetime
@@ -23,11 +24,19 @@ class HomeworkManager():
             'name': dbStructJson['db_collections']['homework_fields']['name']
         }
 
-        # Subject colletion elements
+        # Channel collection elements
+        self.chanCol = mDB[dbStructJson['db_collections']['channel']]
+        self.chanFields = {
+            'id': dbStructJson['db_collections']['channel_fields']['id'],
+            'subject': dbStructJson['db_collections']['channel_fields']['subject'],
+            'chanID': dbStructJson['db_collections']['channel_fields']['channelID']
+        }
+
+        # Subject collection elements
         self.subCol = mDB[dbStructJson['db_collections']['subject']]
         self.subjectList = []
         for sub in self.subCol.find({}, {dbStructJson['db_collections']['subject_fields']["id"]: 0, dbStructJson['db_collections']['subject_fields']["subjectName"]: 1}):
-            self.subjectList.append(sub[dbStructJson['db_collections']['subject_fields']["subjectName"]])
+            self.subjectList.append(sub[dbStructJson['db_collections']['subject_fields']["subjectName"]].lower())
 
         # Emoji collection elements
         hmwEmojiCol = mDB[dbStructJson['db_collections']['emoji']]
@@ -76,8 +85,13 @@ class HomeworkManager():
         return self._hmwRecap
 
     def hmwObserver(self, creatorID, hmwComplete):
+        try:
+            hmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return None
+
         print(f"HOMEWORK_MAN - Observer called by hmw[{creatorID}]")
-        hmw = self.homeworks[creatorID]
         res = ""
         if hmw.userAction == HomeworkManager.HMW_ACTIONS[0]:
             ## Adding an homework
@@ -101,8 +115,14 @@ class HomeworkManager():
             return False
 
     def checkHmwValidity(self, creatorID):
-        if (self.homeworks[creatorID].age > HomeworkManager.MAX_HMW_AGE):
-            del self.homeworks[creatorID]
+        try:
+            currentHmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return False
+
+        if (currentHmw.age > HomeworkManager.MAX_HMW_AGE):
+            del currentHmw
             return False
         else:
             return True
@@ -119,7 +139,7 @@ class HomeworkManager():
 
     def listHmw(self, botAlteringUser):
         # Get all homework with a deadline greater than the current time
-        homeworks = self.hmwCol.find({self.hmwFields['date']: {'$gte': datetime.utcnow()}})
+        homeworks = self.hmwCol.find({self.hmwFields['date']: {'$gte': datetime.utcnow()}}).sort(self.hmwFields['date'])
         emojis = [self.emojiList[HomeworkManager.HMW_ACTIONS[0]], self.emojiList[HomeworkManager.HMW_ACTIONS[1]], self.emojiList[HomeworkManager.HMW_ACTIONS[2]]]
 
         # Formatting the listing homework message before sending it
@@ -143,20 +163,14 @@ class HomeworkManager():
 
     def newHmw(self, creatorID, hmwAction, channelID, botMsgID):
         print(f"HOMEWORK_MAN - Creating a new homework for {creatorID} in mode {HomeworkManager.HMW_ACTIONS[hmwAction]}")
-        self.homeworks[creatorID] = Homework(creatorID, HomeworkManager.HMW_ACTIONS[hmwAction], self.hmwObserver, self.subjectList)
+        suggestedSubject = self.chanCol.find_one({self.chanFields['chanID']: channelID})[self.chanFields['subject']]
+        self.homeworks[creatorID] = Homework(creatorID, HomeworkManager.HMW_ACTIONS[hmwAction], self.hmwObserver, self.subjectList, suggestedSubject)
         self.linkedChannel[creatorID] = channelID
         self.linkedBotMsg[creatorID] = botMsgID
 
         emojiIDs = [HomeworkManager.HMW_EMOJIS[1]] # Cancel emoji
         msgBack = HomeworkMessage.HMW_ADD[self.homeworks[creatorID].state].substitute()
-        (res, emojis) = self.formatBackMsg(self.homeworks[creatorID], emojiIDs, True, msgBack, False, True)
-
-        # res = HomeworkMessage.HMW_ADD['title'].substitute(stepNum = self.homeworks[creatorID].stateIdx + 1, totalStep = self.homeworks[creatorID].nbStep)
-        # res += HomeworkMessage.HMW_UTILS['formatingQuote']
-        # res += HomeworkMessage.HMW_ADD[self.homeworks[creatorID].state].substitute()
-        # res += HomeworkMessage.HMW_UTILS['separationLine']
-        # res += HomeworkMessage.HMW_UTILS['cancel'].substitute(emoji = self.emojiList[HomeworkManager.HMW_EMOJIS[1]], userAction = self.homeworks[creatorID].userActionName)
-        # res += HomeworkMessage.HMW_UTILS['formatingQuote']
+        (res, emojis) = self.formatBackMsg(self.homeworks[creatorID], emojiIDs, True, msgBack, True)
         return res
 
     def deleteHmw(self, creatorID, channelID):
@@ -167,32 +181,29 @@ class HomeworkManager():
             return True
         return False
 
-    def checkHmwState(self, creatorID):
-        if self.homeworks[creatorID].state == HomeworkManager.substates[self.homeworks[creatorID].userAction][-1] and self.homeworks[creatorID].isComplete():
-            return True
-        return False
-
-    def formatBackMsg(self, currentHmw, emojiIDs, updateRes, msgBack, docStatus, beginStatus):
+    def formatBackMsg(self, currentHmw, emojiIDs, updateRes, msgBack, beginStatus):
         emojis = []
 
         if currentHmw.isComplete:
-            if not docStatus and len(currentHmw.doc) <= 0:
+            if not currentHmw.docAwaited and len(currentHmw.doc) <= 0:
                 emojiIDs.append(HomeworkManager.HMW_EMOJIS[2])
             emojiIDs.append(HomeworkManager.HMW_EMOJIS[3])
 
-        if not docStatus:
-            res = currentHmw.lastChange
-        elif docStatus and not beginStatus:
-            res = HomeworkMessage.HMW_CONF['docUpdated'].substitute()
-        res += "\n\n" + HomeworkMessage.HMW_ADD['title'].substitute(stepNum = currentHmw.stateIdx + 1, totalStep = currentHmw.nbStep)
+        res = ""
+        if not beginStatus:
+            res = HomeworkMessage.diffFormatMsg(currentHmw.lastChange) + '\n'
+            # res = HomeworkMessage.HMW_UTILS['formatingQuoteDiff']
+            # res += currentHmw.lastChange
+            # res += HomeworkMessage.HMW_UTILS['formatingQuote']
+        res += HomeworkMessage.HMW_ADD['title'].substitute(stepNum = (currentHmw.stateIdx + 1), totalStep = currentHmw.nbStep)
         res += HomeworkMessage.stateDisplayer(currentHmw.stateIdx)
         res += HomeworkMessage.HMW_UTILS['formatingQuote']
         res += msgBack
 
-        if not updateRes and currentHmw.state == Homework.HMW_STATES[currentHmw.userAction][-1]:
+        if not updateRes and currentHmw.state == Homework.HMW_STATES[currentHmw.userAction][4]:
             # IF the input subject is not correct but have some similarities within the DB
             for counter in range(0, len(currentHmw.subjectChoice)):
-                choiceEmoji = self.emojiNumber[counter]
+                choiceEmoji = self.emojiNumber[counter+1]
                 emojis.append(choiceEmoji)
                 res += HomeworkMessage.HMW_ADD['subjectChoiceReac'].substitute(reac = choiceEmoji, subject = currentHmw.subjectChoice[counter])
 
@@ -204,43 +215,77 @@ class HomeworkManager():
         return (res, emojis)
 
     def updateHmw(self, creatorID, value, isBack = False):
-        currentHmw = self.homeworks[creatorID]
+        try:
+            currentHmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return (None, None)
+
         emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
         if not isBack:
             if not currentHmw.isComplete:
                 # Send the new value to the corresponding homework
                 # updateStatus = self.homeworks[creatorID].updateVal(value, isBack)
                 (updateRes, msgBack) = currentHmw.updateVal(value, isBack)
-                return self.formatBackMsg(currentHmw, emojiIDs, updateRes, msgBack, False, False)
+                return self.formatBackMsg(currentHmw, emojiIDs, updateRes, msgBack, False)
             return (None, None)
         else:
             if currentHmw.isComplete:
                 currentHmw.isComplete = False
             (updateRes, msgBack) = currentHmw.updateVal(value, isBack)
-            return self.formatBackMsg(currentHmw, emojiIDs, updateRes, msgBack, False, False)
-        
-    def checkHmwFileStatus(self, creatorID):
-        return self.homeworks[creatorID].docAwaited
+            return self.formatBackMsg(currentHmw, emojiIDs, updateRes, msgBack, False)
 
-    def setHmwDoc(self, creatorID, newFile):
-        self.homeworks[creatorID].doc = newFile
+    def setHmwDoc(self, creatorID, msgAttachments):
+        try:
+            currentHmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return None
+        print(f"HOMEWORKMANAGER - File to set: {msgAttachments[0].filename}")
+        msgBack = currentHmw.updateDoc(msgAttachments)
+        emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
+        return self.formatBackMsg(currentHmw, emojiIDs, True, msgBack, False)
 
-    def setDoc(self, creatorID):
-        currentHmw = self.homeworks[creatorID]
+    def setDocStatus(self, creatorID):
+        try:
+            currentHmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return None
+
         msgBack = currentHmw.updateDocStatus(True)
-        return self.formatBackMsg(currentHmw, True, msgBack, True)
+        if msgBack:
+            emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
+            return self.formatBackMsg(currentHmw, emojiIDs, True, msgBack, False)
+        else:
+            return None
     
     def insertNewDict(self, creatorID, botAlteringUser):
-        hmwDict = self.homeworks[creatorID].hmwDict()
+        try:
+            currentHmw = self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return None
+        
+        hmwDict = currentHmw.hmwDict()
+
+        chanID = self.chanCol.find_one({self.chanFields['subject']: hmwDict['subject']}, {self.chanFields['id']: 0, self.chanFields['chanID']: 1})[self.chanFields['chanID']]
+
         self.hmwCol.insert_one(hmwDict)
 
         res = HomeworkMessage.HMW_CONF['dbUpdated'].substitute()
         (listHmw, emojis) = self.listHmw(botAlteringUser)
         res += listHmw
 
-        return (res, emojis)
+        return (res, emojis, chanID, currentHmw.doc)
 
-    def userVote(self, creatorID, voteIdx):
-        msgBack = self.homeworks[creatorID].setNewVal(voteIdx)
+    def correctSubVal(self, creatorID, voteIdx):
+        try:
+            currentHmw =  self.homeworks[creatorID]
+        except KeyError as ke:
+            # Handling error when a user try to acces homeworks but have not been registered or shouldn't
+            return None
+
+        msgBack = currentHmw.setNewSubjectVal(voteIdx - 1) # (- 1) because the emoji is 1 instead of 0
         emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
-        return self.formatBackMsg(self.homeworks[creatorID], emojiIDs, True, msgBack, False, False)
+        return self.formatBackMsg(currentHmw, emojiIDs, True, msgBack, False)
