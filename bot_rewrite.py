@@ -5,9 +5,12 @@ import json
 
 schoolBot = commands.Bot(command_prefix='!')
 
+DELETE_TIME = 2
+
 # Three functions to manage the COGs 
 @schoolBot.command()
 async def load(ctx, extension):
+    """Commande '!load [nom_extension]' : permet d'ajouter une extension"""
     try:
         schoolBot.load_extension(f'cogs.{extension}')
         print(f"Loaded extension {extension}")
@@ -26,6 +29,7 @@ async def load(ctx, extension):
 
 @schoolBot.command()
 async def unload(ctx, extension):
+    """Commande '!unload [nom_extension]' : permet de retirer une extension"""
     try:
         schoolBot.unload_extension(f'cogs.{extension}')
         print(f"Unloaded extension {extension}")
@@ -37,6 +41,7 @@ async def unload(ctx, extension):
 
 @schoolBot.command()
 async def reload(ctx, extension):
+    """Commande '!reload [nom_extension]' : permet de recharger une extension"""
     try:
         schoolBot.reload_extension(f'cogs.{extension}')
         print(f"Reloaded extension {extension}")
@@ -69,11 +74,13 @@ async def reload(ctx, extension):
 #TEMP BECAUSE FAIGNASSE
 @schoolBot.command()
 async def q(ctx):
+    """Commande '!q' : permet de recharger automatiquement l'extension 'schoolCog'"""
     try:
         await reload(ctx, 'schoolCog')
-        await ctx.send("SchoolCog reloaded")
+        await ctx.send("SchoolCog reloaded", delete_after = DELETE_TIME)
     except:
-        await ctx.send("SchoolCog failed to reload")
+        await ctx.send("SchoolCog failed to reload", delete_after = DELETE_TIME)
+    await ctx.message.delete()
 
 # Automatic load at start of all COGs listed in folder './cogs'
 for filename in os.listdir("src/cogs"):

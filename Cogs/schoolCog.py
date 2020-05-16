@@ -14,8 +14,12 @@ from .cog_src.Homework import Homework
 
 class SchoolBot(commands.Cog):
     MAX_REACTION_TIME = 60 #60 seconds
+    MAX_WAITING_TIME = 120 #120seconds
+    DELETE_TIME_WAIT = 5 #5 seconds
 
-    RECEIVE_CATTEGORY_ID = "696433108899201155"
+    RECEIVE_CATEGORY_ID = "696433108899201155"
+    RECEIVE_CATEGORY_NAME = "Espace profs"
+    HOMEWORK_DISPLAY_CHANNEL_ID = "696433108559331346"
 
     def __init__(self, schoolBot):
         super().__init__()
@@ -79,7 +83,7 @@ class SchoolBot(commands.Cog):
         # Channel collection elements
         chanDB = self.mDB[self.dbStruct['db_collections']['channel']]
         self.authorizedChan = []
-        for chan in chanDB.find({self.dbStruct['db_collections']['channel_fields']['categoryID']: SchoolBot.RECEIVE_CATTEGORY_ID}):
+        for chan in chanDB.find({self.dbStruct['db_collections']['channel_fields']['categoryID']: SchoolBot.RECEIVE_CATEGORY_ID}):
             self.authorizedChan.append(chan[self.dbStruct['db_collections']['channel_fields']['channelID']])
 
 
@@ -104,6 +108,19 @@ class SchoolBot(commands.Cog):
     
     def userChanCheck(self, chanID):
         return str(chanID) in self.authorizedChan
+
+    async def deleteAll(self, user, chanID):
+        (deleteStatus, deleteMsg) = self.hmwManager.deleteHmw(user.id, chanID)
+
+        for userMsg in self.hmwChecker[user]['userMsgList']:
+            await userMsg.delete()
+
+        if self.hmwChecker[user]['botMsg']:
+            await self.hmwChecker[user]['botMsg'].delete()
+
+        del self.hmwChecker[user]
+
+        return (deleteStatus, deleteMsg)
 
 
     @commands.Cog.listener('on_message')
@@ -142,8 +159,7 @@ class SchoolBot(commands.Cog):
 
                     if message.author in self.hmwChecker:
                         await self.hmwChecker[message.author]['botMsg'].delete()
-                        message.delete()
-                        # self.hmwChecker[message.author]['userMsgList'].append(message)
+                        self.hmwChecker[message.author]['userMsgList'].append(message)
 
                     newBotMsg = await message.channel.send(newMsg)
 
@@ -177,6 +193,7 @@ class SchoolBot(commands.Cog):
                 emojis = []
                 userAction = None
                 hmwComplete = False
+                hmwCancelled = False
 
                 if str(reaction) == self.hmwManagementEmojis["newHmwEmoji"]:
                     ######## Adding a new homework
@@ -188,13 +205,17 @@ class SchoolBot(commands.Cog):
                     ######## Editing an existing homework
                     userAction = "Édition"
                     #TODO: À COMPLÉTER
-                    await reaction.message.channel.send("Edition mode is not implemented yet")
+                    newMsg += "Edition mode is not implemented yet"
+                    # await reaction.message.channel.send(newMsg, delete_after = SchoolBot.DELETE_TIME_WAIT)
+                    hmwComplete = True
 
                 elif str(reaction) == self.hmwManagementEmojis["delHmwEmoji"]:
                     ######## Deleting an existing homework
                     userAction = "Suppression"
                     #TODO: À COMPLÉTER
-                    await reaction.message.channel.send("Deletion mode is not implemented yet")
+                    newMsg += "Deletion mode is not implemented yet"
+                    # await reaction.message.channel.send(newMsg, delete_after = SchoolBot.DELETE_TIME_WAIT)
+                    hmwComplete = True
 
                 elif str(reaction) == self.hmwConfEmojis["checkEmoji"]:
                     ######## Informing that a doc will be added to an homework
@@ -203,9 +224,10 @@ class SchoolBot(commands.Cog):
 
                 elif str(reaction) == self.hmwConfEmojis["crossEmoji"]:
                     ######## Cancel homework creation
-                    if self.hmwManager.deleteHmw(user.id, reaction.message.channel.id):
-                        newMsg += "Devoir en cours de création a été supprimé"
-                        del self.hmwChecker[user]
+                    (deleteStatus, deleteMsg) = await self.deleteAll(user, reaction.message.channel.id)
+                    if deleteStatus:
+                        hmwCancelled = True
+                        newMsg += deleteMsg
 
                 elif str(reaction) == self.hmwConfEmojis["backEmoji"]:
                     ######## Cancel last modification
@@ -214,7 +236,7 @@ class SchoolBot(commands.Cog):
 
                 elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
                     ######## Validate new homework and send it to the database
-                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.insertNewDict(user.id, self.userRoleCheck(user.roles))
+                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.insertNewDict(user.id)
                     newMsg += msgBack
 
                     ######## Selecting the right text channel to send the homework documents
@@ -222,6 +244,9 @@ class SchoolBot(commands.Cog):
                     for doc in hmwDocList:
                         docFile = await doc.to_file()
                         await channel.send(file = docFile)
+                        await sleep(0.01)
+                    
+                    self.updateHmwChannel(reaction.message.channel.guild, None)
 
                     hmwComplete = True
 
@@ -233,12 +258,14 @@ class SchoolBot(commands.Cog):
                     ######## Sending the new message to the channel + deleting old message
                     if user in self.hmwChecker:
                         await self.hmwChecker[user]['botMsg'].delete()
-                        if hmwComplete and self.hmwManager.deleteHmw(user.id, reaction.message.channel.id):
-                            for userMsg in self.hmwChecker[user]['userMsgList']:
-                                await userMsg.delete()
-                            del self.hmwChecker[user]
+                        self.hmwChecker[user]['botMsg'] = None
+                        if hmwComplete:
+                            await self.deleteAll(user, reaction.message.channel.id)
 
-                    botMsg = await reaction.message.channel.send(newMsg)
+                    if hmwComplete or hmwCancelled:
+                        botMsg = await reaction.message.channel.send(newMsg, delete_after= SchoolBot.DELETE_TIME_WAIT)
+                    else:
+                        botMsg = await reaction.message.channel.send(newMsg)
 
                     if user in self.hmwChecker:
                         self.hmwChecker[user]['botMsg'] = botMsg
@@ -247,16 +274,55 @@ class SchoolBot(commands.Cog):
                         await botMsg.add_reaction(emoji)
             else:
                 # Over 15 seconds
-                if reacTime > 120:
+                if reacTime > SchoolBot.MAX_WAITING_TIME:
                     # Over 2 minutes
                     print("Deleting hmw")
-                    self.hmwManager.deleteHmw(user.id, reaction.message.channel.id)
-                    del self.hmwChecker[user]
+                    await self.deleteAll(user, reaction.message.channel.id)
                     return
         else:
             # User who reacted to the message didn't create any homework
             print(f"No homework corresponding to user {user}")
             pass
+
+    ##########
+    ##########
+    ## UTILITY FUNCTIONs
+    ##########
+    ##########
+
+    async def updateHmwChannel(self, guild, updatedHmwList):
+        hmwChannel = guild.get_channel(int(SchoolBot.HOMEWORK_DISPLAY_CHANNEL_ID))
+        lastMsgID = hmwChannel.last_message_id
+        print(f"SCHOOLBOT - LastMsgID : {lastMsgID}")
+
+        if not updatedHmwList:
+            (updatedHmwList, emojis) = self.hmwManager.listHmw(False)
+
+        if lastMsgID:
+            print(f"SCHOOLBOT - Message found")
+            try:
+                lastMsg = await hmwChannel.fetch_message(lastMsgID)
+                if lastMsg.author == self.schoolBot.user:
+                    print(f"SCHOOLBOT - Same Author")
+                    await lastMsg.edit(content = updatedHmwList)
+                    return
+            except discord.errors.NotFound as nf:
+                await hmwChannel.send(updatedHmwList)
+                return
+        print(f"SCHOOLBOT - Message not found or not same author")
+        await hmwChannel.send(updatedHmwList)
+
+
+    ##########
+    ##########
+    ## COMMANDs
+    ##########
+    ##########
+
+    @commands.command()
+    async def dev(self, ctx):
+        await self.updateHmwChannel(ctx.message.channel.guild)
+        await ctx.message.delete()
 
     homeworkDesc = """Commande permettant de manipuler les devoirs
     --> listage, ajout, modification, suppression"""
@@ -268,24 +334,25 @@ class SchoolBot(commands.Cog):
         if chanAuthorized:
             userAuthorized = self.userRoleCheck(ctx.author.roles)
             (formatedHmwList, emojis) = self.hmwManager.listHmw(userAuthorized)
+            self.updateHmwChannel(ctx.message.channel.guild, formatedHmwList)
             
             # Sending the msg
             hmwListMsg  = await ctx.send(formatedHmwList)
             
             if userAuthorized:
-                if chanAuthorized:
-                    # Add managing reactions to it
-                    for hmwEmoji in emojis:
-                        await hmwListMsg.add_reaction(hmwEmoji)
+                # Add managing reactions to it
+                for hmwEmoji in emojis:
+                    await hmwListMsg.add_reaction(hmwEmoji)
 
-                    self.hmwChecker[ctx.author] = {
-                        'botMsg': hmwListMsg,
-                        'userMsgList': [ctx.message]
-                    }
+                self.hmwChecker[ctx.author] = {
+                    'botMsg': hmwListMsg,
+                    'userMsgList': [ctx.message]
+                }
             else:
                 print(f"SCHOOLBOT - User not authorized")
         else:
             print(f"SCHOOLBOT - Channel not authorized")
+            await ctx.send(f"Veuillez utiliser l'un des salons de la catégorie #{SchoolBot.RECEIVE_CATEGORY_NAME} pour utiliser cette commande", delete_after = SchoolBot.DELETE_TIME_WAIT)
 
     # @commands.command()
     # async def createSubject(self, ctx):

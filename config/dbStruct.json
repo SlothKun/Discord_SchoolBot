@@ -28,7 +28,8 @@
             "deadline": "deadline",
             "creator": "creator",
             "subject": "subject",
-            "target": "cible"
+            "target": "cible",
+            "chanID": "docChanID"
         },
         "correction":  "correction",
         "correction_fields": {

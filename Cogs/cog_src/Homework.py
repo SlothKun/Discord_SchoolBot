@@ -19,6 +19,12 @@ class Homework():
         "hmwDelete": "suppression"
     }
 
+    DATE_FORMAT = {
+        'datetime': '%d/%m',
+        'str': 'JJ/MM',
+        'strptime': '%Y/%d/%m'
+    }
+
     WORD_SENSIBILITY = 0.4
 
     def __init__(self, creator, userAction, observerFunc, subjectList, suggSubject):
@@ -36,6 +42,7 @@ class Homework():
         self._name = ""
         self._docAwaited = False
         self._doc = []
+        self._dedicatedChanID = None
         self._deadline = None
         self._status = None
         self._subject = None
@@ -64,6 +71,7 @@ class Homework():
         hmwDict['creator'] = {'name': self.id}
         hmwDict['subject'] = self.subject
         hmwDict['cible'] = 'TS1'
+        hmwDict['docChanID'] = self.dedicatedChanID
         return hmwDict
 
     ##########
@@ -79,6 +87,10 @@ class Homework():
     @property
     def age(self):
         return (datetime.datetime.utcnow() - self._creationDate).total_seconds()
+
+    @property
+    def suggSubject(self):
+        return self._suggestedSubject
 
     @property
     def userAction(self):
@@ -121,6 +133,10 @@ class Homework():
     @property
     def doc(self):
         return self._doc
+
+    @property
+    def dedicatedChanID(self):
+        return self._dedicatedChanID
     
     @property
     def date(self):
@@ -178,6 +194,10 @@ class Homework():
     @doc.setter
     def doc(self, value):
         self._doc.append(value)
+
+    @dedicatedChanID.setter
+    def dedicatedChanID(self, value):
+        self._dedicatedChanID = value
     
     @date.setter
     def date(self, value):
@@ -196,12 +216,6 @@ class Homework():
     ## UTILITY FUNCTIONs
     ##########
     ##########
-    
-    def isDocNeeded(self):
-        # Function to check if the document required by the creator has been sent
-        if self.docAwaited and len(self.doc) == 0:
-            return False
-        return True
 
     def updateState(self, isBack):
         # Function to update the state of the current homework forward or backward if needed
@@ -228,7 +242,7 @@ class Homework():
                 #Name
                 oldValue = self.date
                 self.date = None
-                res = res.substitute(dateFormat = 'AAAA-MM-JJ', dateExample = datetime.datetime.now().strftime('%Y-%m-%d'))
+                res = res.substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
             elif self.state == Homework.HMW_STATES[self.userAction][2]:
                 #Date
                 oldValue = self.status
@@ -251,23 +265,26 @@ class Homework():
             if self.state == Homework.HMW_STATES[self.userAction][1]:
                 #Name
                 self.name = value
-                res = res.substitute(dateFormat = 'AAAA-MM-JJ', dateExample = datetime.datetime.now().strftime('%Y-%m-%d'))
+                res = res.substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
             elif self.state == Homework.HMW_STATES[self.userAction][2]:
                 #Date
                 try:
-                    self.date = datetime.datetime.strptime(value, "%Y-%m-%d")
+                    value = str(datetime.datetime.now().year) + '/' + value
+                    self.date = datetime.datetime.strptime(value, Homework.DATE_FORMAT['strptime'])
+                    #TODO: Vérifier que la date est bien supérieure à la date d'aujourd'hui
                     res = res.substitute()
                 except ValueError as ve:
-                    self.lastError = HomeworkMessage.HMW_CONF['dateError'].substitute(date = datetime.datetime.now().strftime('%Y-%m-%d'))
+                    self.lastError = HomeworkMessage.HMW_CONF['dateError'].substitute(dateFormat = Homework.DATE_FORMAT['str'], date = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
                     self.lastChange = HomeworkMessage.HMW_CONF["wrongAction"].substitute(errorMsg = self.lastError)
                     self.date = None
                     self.updateState(True)
-                    res = HomeworkMessage.HMW_ADD[self.state].substitute(dateFormat = 'AAAA-MM-JJ', dateExample = datetime.datetime.now().strftime('%Y-%m-%d'))
+                    res = HomeworkMessage.HMW_ADD[self.state].substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
                     return (False, res)
             elif self.state == Homework.HMW_STATES[self.userAction][3]:
                 #Status
                 self.status = value
                 res = res.substitute()
+                self._observer(self.id)
             elif self.state == Homework.HMW_STATES[self.userAction][4]:
                 #Subject
                 if value in self.subjectDBList:
@@ -275,7 +292,6 @@ class Homework():
                     self.subject = value
                     res = res.substitute(hmwRecap = self)
                     self.isComplete = True
-                    self._observer(self.id, self.isDocNeeded())
                 else:
                     # Subjet input doesn't exist in DB
                     self.subjectChoice = get_close_matches(value.lower(), self.subjectDBList, 2, Homework.WORD_SENSIBILITY)
@@ -312,7 +328,6 @@ class Homework():
         if self.state == Homework.HMW_STATES[self.userAction][-1]:
             self.lastChange = ""
             for doc in docs:
-                print(f"Treating doc: {doc.filename}")
                 self.doc = doc
                 self.lastChange += HomeworkMessage.HMW_CONF["docAdded"].substitute(docName = doc.filename)
             res = HomeworkMessage.HMW_ADD[self.state].substitute(hmwRecap = self)
@@ -321,13 +336,22 @@ class Homework():
 
     def setNewSubjectVal(self, voteIdx):
         res = ""
-        if voteIdx < len(self.subjectChoice):
-            if self.state == Homework.HMW_STATES[self.userAction][4]:
-                self.subject = self.subjectChoice[voteIdx]
-                res = HomeworkMessage.HMW_ADD[self.state].substitute(hmwRecap = self)
-                self.isComplete = True
-                self._observer(self.id, self.isDocNeeded())
-                self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.subjectChoice[voteIdx])
+        if self.state == Homework.HMW_STATES[self.userAction][3]:
+            # If still in 'Status' state --> user choose the subject in reaction
+            self.subject = self.suggSubject
+            self.updateState(False)
+            res = HomeworkMessage.HMW_ADD[self.state]
+            res = res.substitute(hmwRecap = self)
+            self.isComplete = True
+            self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.suggSubject)
         else:
-            pass
+            # Already in 'Subject' state --> user is choosing between the possible subject from its input
+            if voteIdx < len(self.subjectChoice):
+                if self.state == Homework.HMW_STATES[self.userAction][4]:
+                    self.subject = self.subjectChoice[voteIdx]
+                    res = HomeworkMessage.HMW_ADD[self.state].substitute(hmwRecap = self)
+                    self.isComplete = True
+                    self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.subjectChoice[voteIdx])
+            else:
+                pass
         return res

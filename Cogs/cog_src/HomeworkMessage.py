@@ -22,6 +22,7 @@ class HomeworkMessage():
         "subject": Template("$hmwRecap"),
         "document": Template("$hmwRecap"),
 
+        "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
         "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
         "subjectChoiceReac": Template("\n\tUtilisez la réaction $reac pour sélectionner la matiere '$subject'"),
     }
@@ -31,25 +32,27 @@ class HomeworkMessage():
     HMW_DELETE = {}
 
     HMW_CONF = {
-        "name": Template("+ Nom '$var' a bien été enregistré"),
-        "date": Template("+ Date '$var' a bien été enregistrée"),
-        "status": Template("+ Statut '$var' a bien été enregistré"),
-        "subject": Template("+ Matière '$var' a bien été enregistrée"),
-        "docUpdated": Template("+ Autorisation d'associer un fichier à ce devoir.\nLes prochains fichiers que vous enverrez dans ce salon seront liés à ce devoir"),
-        "docAdded": Template("+ Document $docName a bien été ajouté\n"),
+        "name": Template("+ Nom '$var' a bien été enregistré +"),
+        "date": Template("+ Date '$var' a bien été enregistrée +"),
+        "status": Template("+ Statut '$var' a bien été enregistré +"),
+        "subject": Template("+ Matière '$var' a bien été enregistrée +"),
+        "docUpdated": Template("+ Autorisation d'associer un fichier à ce devoir.\nLes prochains fichiers que vous enverrez dans ce salon seront liés à ce devoir +"),
+        "docAdded": Template("+ Document $docName a bien été ajouté +\n"),
 
-        "cancelledAction": Template("+ Dernière action '$oldVal' annulée"),
-        "wrongAction": Template("- Dernière action n'a pas pu être enregistrée : \n\t$errorMsg"),
-        "dateError": Template("- Erreur de format de date:\n\tLe format de la date doit être le suivant 'AAAA-MM-JJ' - ex: $date"),
+        "cancelledAction": Template("+ Dernière action '$oldVal' annulée +"),
+        "wrongAction": Template("- Dernière action n'a pas pu être enregistrée : -\n-\t$errorMsg"),
+        "dateError": Template("Erreur de format de date:\n\tLe format de la date doit être le suivant '$dateFormat' - ex: $date"),
 
         
-        'subjectError': Template("- Aucune matière renseignée ne correspond à l'entrée '$val'. Liste des matières renseignées:\n$subjectList"),
-        'subjectChoice': Template("- Matière '$sub' non renseignée, mais $nbChoice possibilité$plural1 existe$plural2: $subjectChoice "),
+        'subjectError': Template("- Aucune matière renseignée ne correspond à l'entrée '$val'. Liste des matières renseignées: -\n$subjectList"),
+        'subjectChoice': Template("- Matière '$sub' non renseignée, mais $nbChoice possibilité$plural1 existe$plural2: $subjectChoice  -"),
 
-        "backMessage": Template("+ Dernière modification ($lastModif) a bien été annulée"),
-        "cancelMessage": Template("+ $userAction du devoir a bien été annulé"),
+        "backMessage": Template("+ Dernière modification ($lastModif) a bien été annulée +"),
+        "cancelMessage": Template("+ $userAction du devoir a bien été annulé +"),
 
-        "dbUpdated": Template("+ Devoir enregistré dans la base de données")
+        "dbUpdated": Template("+ Devoir enregistré dans la base de données +"),
+
+        "hmwDeleted": Template("+ Devoir en cours de création a été supprimé +")
     }
 
     HMW_DESC = {
@@ -82,5 +85,4 @@ class HomeworkMessage():
     @classmethod
     def diffFormatMsg(cls, msg):
         res = HomeworkMessage.HMW_UTILS['formatingQuoteDiff'] + msg + HomeworkMessage.HMW_UTILS['formatingQuote']
-        print(res)
         return str(res)
