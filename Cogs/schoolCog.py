@@ -170,7 +170,7 @@ class SchoolBot(commands.Cog):
                         await newBotMsg.add_reaction(emoji)
             else:
                 await message.channel.send("Homework too old --> Has been deleted")
-                pass
+                await self.deleteAll(message.author, message.channel.id)
         else:
             # Casual talker, not configuring any homework at the moment
             pass
@@ -246,7 +246,7 @@ class SchoolBot(commands.Cog):
                         await channel.send(file = docFile)
                         await sleep(0.01)
                     
-                    self.updateHmwChannel(reaction.message.channel.guild, None)
+                    await self.updateHmwChannel(reaction.message.channel.guild, None)
 
                     hmwComplete = True
 
@@ -274,11 +274,16 @@ class SchoolBot(commands.Cog):
                         await botMsg.add_reaction(emoji)
             else:
                 # Over 15 seconds
+                await self.deleteAll(user, reaction.message.channel.id)
                 if reacTime > SchoolBot.MAX_WAITING_TIME:
                     # Over 2 minutes
                     print("Deleting hmw")
                     await self.deleteAll(user, reaction.message.channel.id)
                     return
+                else:
+                    # Maybe you want to reset the timer ? Add this part here
+                    # For the moment --> doing nothing
+                    pass
         else:
             # User who reacted to the message didn't create any homework
             print(f"No homework corresponding to user {user}")
@@ -293,23 +298,19 @@ class SchoolBot(commands.Cog):
     async def updateHmwChannel(self, guild, updatedHmwList):
         hmwChannel = guild.get_channel(int(SchoolBot.HOMEWORK_DISPLAY_CHANNEL_ID))
         lastMsgID = hmwChannel.last_message_id
-        print(f"SCHOOLBOT - LastMsgID : {lastMsgID}")
 
         if not updatedHmwList:
             (updatedHmwList, emojis) = self.hmwManager.listHmw(False)
 
         if lastMsgID:
-            print(f"SCHOOLBOT - Message found")
             try:
                 lastMsg = await hmwChannel.fetch_message(lastMsgID)
                 if lastMsg.author == self.schoolBot.user:
-                    print(f"SCHOOLBOT - Same Author")
                     await lastMsg.edit(content = updatedHmwList)
                     return
             except discord.errors.NotFound as nf:
                 await hmwChannel.send(updatedHmwList)
                 return
-        print(f"SCHOOLBOT - Message not found or not same author")
         await hmwChannel.send(updatedHmwList)
 
 
@@ -334,7 +335,7 @@ class SchoolBot(commands.Cog):
         if chanAuthorized:
             userAuthorized = self.userRoleCheck(ctx.author.roles)
             (formatedHmwList, emojis) = self.hmwManager.listHmw(userAuthorized)
-            self.updateHmwChannel(ctx.message.channel.guild, formatedHmwList)
+            await self.updateHmwChannel(ctx.message.channel.guild, formatedHmwList)
             
             # Sending the msg
             hmwListMsg  = await ctx.send(formatedHmwList)

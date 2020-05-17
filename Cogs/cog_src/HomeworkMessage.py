@@ -16,10 +16,10 @@ class HomeworkMessage():
         "title": Template("**Ajout d'un nouveau devoir - Étape $stepNum/$totalStep**\n"),
 
         "idle": Template("Veuillez préciser le nom du devoir que vous souhaitez créer \n\t - ex: 'Devoir maison #1'"),
-        "name": Template("Veuillez préciser la date limite du devoir que vous souhaitez créer \n\tLe format de la date doit être le suivant '$dateFormat' - ex: $dateExample"),
-        "date": Template("Veuillez préciser le statut du devoir que vous souhaitez créer \n\t - ex: 'À rendre', 'Obligatoire'"),
-        "status": Template("Veuillez préciser la matière du devoir que vous souhaitez créer \n\t - ex: 'Mathématiques', 'Physique'"),
-        "subject": Template("$hmwRecap"),
+        "name": Template("Veuillez préciser la matière du devoir que vous souhaitez créer \n\t - ex: 'Mathématiques', 'Physique'"),
+        "date": Template("Veuillez préciser le statut du devoir que vous souhaitez créer \n\t - ex: 'À rendre', 'Optionel'"),
+        "status": Template("$hmwRecap"),
+        "subject": Template("Veuillez préciser la date limite du devoir que vous souhaitez créer \n\tLe format de la date doit être le suivant '$dateFormat' - ex: $dateExample"),
         "document": Template("$hmwRecap"),
 
         "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
@@ -42,6 +42,8 @@ class HomeworkMessage():
         "cancelledAction": Template("+ Dernière action '$oldVal' annulée +"),
         "wrongAction": Template("- Dernière action n'a pas pu être enregistrée : -\n-\t$errorMsg"),
         "dateError": Template("Erreur de format de date:\n\tLe format de la date doit être le suivant '$dateFormat' - ex: $date"),
+        "dateInf": Template("Date antérieure:\n\tLa date entrée est trop ancienne"),
+        "longName": Template("Le nom entré ne doit pas excéder $maxCar caractères\n\tVeuillez entrer un nom plus court"),
 
         
         'subjectError': Template("- Aucune matière renseignée ne correspond à l'entrée '$val'. Liste des matières renseignées: -\n$subjectList"),
@@ -64,7 +66,7 @@ class HomeworkMessage():
 
     @classmethod
     def stateDisplayer(cls, stateNum):
-        stateFR = ['Nom', 'Date', 'Statut', 'Matiere', 'Document']
+        stateFR = ['Nom', 'Matiere', 'Date', 'Statut', 'Document']
         # if stateNum > 0:
         if stateNum == 0:
             res = '[' + stateFR[0] + '] -> '

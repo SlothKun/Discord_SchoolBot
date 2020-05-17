@@ -209,14 +209,14 @@ class HomeworkManager():
         res += HomeworkMessage.HMW_UTILS['formatingQuote']
         res += msgBack
 
-        if not updateRes and currentHmw.state == Homework.HMW_STATES[currentHmw.userAction][4]:
+        if not updateRes and currentHmw.state == Homework.HMW_STATES[2]:
             # IF the input subject is not correct but have some similarities within the DB
             for counter in range(0, len(currentHmw.subjectChoice)):
                 choiceEmoji = self.emojiNumber[counter+1]
                 emojis.append(choiceEmoji)
                 res += HomeworkMessage.HMW_ADD['subjectChoiceReac'].substitute(reac = choiceEmoji, subject = currentHmw.subjectChoice[counter])
-        if self.suggestedSubject and currentHmw.state == Homework.HMW_STATES[currentHmw.userAction][3]:
-            # Hmw validated its status and is requiring the subject
+        if self.suggestedSubject and currentHmw.state == Homework.HMW_STATES[1]:
+            # Hmw validated its name and is requiring the subject
             emojis.append(self.emojiNumber[1]) # Emoji #1
             res += HomeworkMessage.HMW_ADD['subjectChoiceReac'].substitute(reac = self.emojiNumber[1], subject = currentHmw.suggSubject)
 
