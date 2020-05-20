@@ -29,6 +29,7 @@
             "creator": "creator",
             "subject": "subject",
             "target": "cible",
+            "status": "status",
             "chanID": "docChanID"
         },
         "correction":  "correction",

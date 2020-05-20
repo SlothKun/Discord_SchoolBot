@@ -9,7 +9,14 @@ class HomeworkMessage():
         "cancel": Template("\n\t$emoji - Annuler $userAction du devoir"),
         "back": Template("\n\t$emoji - Annuler dernière action"),
         "addFile": Template("\n\t$emoji - Ajouter un document au devoir"),
-        "modifConf": Template("\n\t$emoji - Confirmer $userAction du devoir")
+        "modifConf": Template("\n\t$emoji - Confirmer $userAction du devoir"),
+        "nextHmwList": Template("\n\t$emoji - Afficher plus de devoirs"),
+
+        "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
+        "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
+        "subjectChoiceReac": Template("\n\tUtilisez la réaction $reac pour sélectionner la matiere '$subject'"),
+
+        "inDB": Template("Veuillez entrer un nouveau nom pour ce devoir afin d'éviter les conflits.\n\tAncien nom : $oldName")
     }
 
     HMW_ADD = {
@@ -17,42 +24,56 @@ class HomeworkMessage():
 
         "idle": Template("Veuillez préciser le nom du devoir que vous souhaitez créer \n\t - ex: 'Devoir maison #1'"),
         "name": Template("Veuillez préciser la matière du devoir que vous souhaitez créer \n\t - ex: 'Mathématiques', 'Physique'"),
-        "date": Template("Veuillez préciser le statut du devoir que vous souhaitez créer \n\t - ex: 'À rendre', 'Optionel'"),
+        "date": Template("Veuillez préciser le statut du devoir que vous souhaitez créer \n\t - ex: 'À rendre', 'Optionnel'"),
         "status": Template("$hmwRecap"),
         "subject": Template("Veuillez préciser la date limite du devoir que vous souhaitez créer \n\tLe format de la date doit être le suivant '$dateFormat' - ex: $dateExample"),
-        "document": Template("$hmwRecap"),
-
-        "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
-        "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
-        "subjectChoiceReac": Template("\n\tUtilisez la réaction $reac pour sélectionner la matiere '$subject'"),
+        "document": Template("$hmwRecap")
     }
 
-    HMW_EDIT = {}
+    HMW_EDIT = {
+        "title": Template("**Édition d'un devoir - Étape $stepNum/$totalStep**\n"),
+        "idle": Template("Veuillez préciser la matière du devoir que vous souhaitez éditer \n\t - ex: 'Mathématiques', 'Physique'"),
+        "subject": Template("Veuillez sélectionner le devoir que vous souhaitez éditer dans la liste suivante:\n$hmwList"),
+        "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
+        "name": Template("Vous avez sélectionné le devoir suivant:\n$hmwToDelete\n\nQuel champ souhaitez-vous éditer ?\n$fieldList"),
 
-    HMW_DELETE = {}
+        "field": Template("- Cliquer sur la réaction $reac pour modifier le '$fieldElement' du devoir\n"),
+    }
+
+    HMW_DELETE = {
+        "title": Template("**Suppression d'un devoir - Étape $stepNum/$totalStep**\n"),
+        "idle": Template("Veuillez préciser la matière du devoir que vous souhaitez supprimer \n\t - ex: 'Mathématiques', 'Physique'"),
+        "subject": Template("Veuillez sélectionner le devoir que vous souhaitez supprimer dans la liste suivante:\n$hmwList"),
+        "name": Template("Vous avez sélectionné le devoir suivant:\n$hmwToDelete\n\nÊtes-vous sûr de vouloir supprimer ce devoir ?")
+    }
 
     HMW_CONF = {
         "name": Template("+ Nom '$var' a bien été enregistré +"),
         "date": Template("+ Date '$var' a bien été enregistrée +"),
         "status": Template("+ Statut '$var' a bien été enregistré +"),
         "subject": Template("+ Matière '$var' a bien été enregistrée +"),
-        "docUpdated": Template("+ Autorisation d'associer un fichier à ce devoir.\nLes prochains fichiers que vous enverrez dans ce salon seront liés à ce devoir +"),
-        "docAdded": Template("+ Document $docName a bien été ajouté +\n"),
+        "docUpdated": Template("+ Autorisation d'associer un fichier à ce devoir. +\nLes prochains fichiers que vous enverrez dans ce salon seront liés à ce devoir"),
+        "docAdded": Template("+ Document '$docName' a bien été ajouté +\n"),
 
         "cancelledAction": Template("+ Dernière action '$oldVal' annulée +"),
+        "cancelledDoc": Template("+ Les fichiers ne sont désormais plus autorisés +"),
         "wrongAction": Template("- Dernière action n'a pas pu être enregistrée : -\n-\t$errorMsg"),
         "dateError": Template("Erreur de format de date:\n\tLe format de la date doit être le suivant '$dateFormat' - ex: $date"),
         "dateInf": Template("Date antérieure:\n\tLa date entrée est trop ancienne"),
         "longName": Template("Le nom entré ne doit pas excéder $maxCar caractères\n\tVeuillez entrer un nom plus court"),
 
-        
-        'subjectError': Template("- Aucune matière renseignée ne correspond à l'entrée '$val'. Liste des matières renseignées: -\n$subjectList"),
-        'subjectChoice': Template("- Matière '$sub' non renseignée, mais $nbChoice possibilité$plural1 existe$plural2: $subjectChoice  -"),
+        'subjectError': Template("Aucune matière renseignée ne correspond à l'entrée '$val'. Liste des matières renseignées: -\n$subjectList"),
+        'subjectChoice': Template("Matière '$sub' non renseignée, mais $nbChoice possibilité$plural1 existe$plural2: $subjectChoice  -"),
+
+        "inDB": Template("- Ce devoir existe déjà en mémoire: -\n$inDBHmw"),
+        "goodDB": Template("+ Nouvelle combinaison (nom = '$nameVar', matière = '$subjectVar') est valide +"),
 
         "backMessage": Template("+ Dernière modification ($lastModif) a bien été annulée +"),
         "cancelMessage": Template("+ $userAction du devoir a bien été annulé +"),
 
         "dbUpdated": Template("+ Devoir enregistré dans la base de données +"),
+        "hmwDEdited": Template("+ Devoir édité dans la base de données +"),
+        "hmwDDeleted": Template("+ Devoir supprimé de la base de données +"),
 
         "hmwDeleted": Template("+ Devoir en cours de création a été supprimé +")
     }

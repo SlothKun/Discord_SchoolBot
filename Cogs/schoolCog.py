@@ -86,10 +86,151 @@ class SchoolBot(commands.Cog):
         for chan in chanDB.find({self.dbStruct['db_collections']['channel_fields']['categoryID']: SchoolBot.RECEIVE_CATEGORY_ID}):
             self.authorizedChan.append(chan[self.dbStruct['db_collections']['channel_fields']['channelID']])
 
+    ##########
+    ##########
+    ## LISTENERs
+    ##########
+    ##########
 
     @commands.Cog.listener()
     async def on_ready(self):
         print(f"Cog {self.__class__.__name__} is online")
+
+    @commands.Cog.listener('on_message')
+    async def messageListener(self, message):
+        if message.author == self.schoolBot.user:
+            return
+        
+        if self.userRoleCheck(message.author.roles) and self.hmwManager.checkHmw(message.author.id, message.channel.id):
+            # User have previously created an Homework object and is writing in the same channel
+            if self.hmwManager.checkHmwValidity(message.author.id):
+                # User's created Homework object is still valid
+                if len(message.attachments) == 0:
+                    [resMsg, emojiList] = self.hmwManager.updateHmw(message.author.id, message.content)
+                    if resMsg is not None:
+                        newMsg = f"{message.author.mention}\n"
+                        newMsg += resMsg
+                        await self.updateBotMsgFromUserMsg(message.author, message, newMsg, emojiList)
+                    else:
+                        print("SCHOOLBOT - HOMEWORK_MAN updateHmw() returned None")
+
+                else:
+                    # Message contains a file
+                    newMsg = f"{message.author.mention}\n"
+                    (msgBack, emojiList) = self.hmwManager.setHmwDoc(message.author.id, message.attachments)
+                    newMsg += msgBack
+                    await self.updateBotMsgFromUserMsg(message.author, message, newMsg, emojiList)
+
+            else:
+                await message.channel.send("Homework too old --> Has been deleted", delete_after= SchoolBot.DELETE_TIME_WAIT)
+                await self.deleteAll(message.author, message.channel.id)
+                
+        else:
+            # Casual talker, not configuring any homework at the moment
+            pass
+    
+    # Listen to all reactions added on msg on the server
+    @commands.Cog.listener('on_reaction_add')
+    async def reactionListener(self, reaction, user):
+        ## IGNORE BOT REACTIONS
+        if user == self.schoolBot.user:
+            return
+
+        ## HOMEWORK REACTION MANAGEMENT
+        if self.userRoleCheck(user.roles) and user in self.hmwChecker and reaction.message.id == self.hmwChecker[user]['botMsg'].id:
+            reactionDate = datetime.datetime.utcnow()
+            reacTime = (reactionDate - reaction.message.created_at).total_seconds()
+            if  reacTime < SchoolBot.MAX_REACTION_TIME:
+                # User reacted within MAX_REACTION_TIME seconds
+                newMsg = f"{user.mention}\n"
+                emojis = []
+                userAction = None
+                hmwComplete = False
+                hmwCancelled = False
+
+                if str(reaction) == self.hmwManagementEmojis["newHmwEmoji"]:
+                    ######## Adding a new homework
+                    userAction = "Ajout"
+                    (msgBack, emojis) = self.hmwManager.newHmw(user.id, 0, reaction.message.channel.id, reaction.message.id)
+                    newMsg += msgBack
+                    # emojis.append(self.hmwConfEmojis["crossEmoji"])
+
+                elif str(reaction) == self.hmwManagementEmojis["editHmwEmoji"]:
+                    ######## Editing an existing homework
+                    userAction = "Édition"
+                    #TODO: À COMPLÉTER
+                    newMsg += "Edition mode is not implemented yet"
+                    # await reaction.message.channel.send(newMsg, delete_after = SchoolBot.DELETE_TIME_WAIT)
+                    hmwComplete = True
+
+                elif str(reaction) == self.hmwManagementEmojis["delHmwEmoji"]:
+                    ######## Deleting an existing homework
+                    userAction = "Suppression"
+                    (msgBack, emojis) = self.hmwManager.newHmw(user.id, 2, reaction.message.channel.id, reaction.message.id)
+                    newMsg += msgBack
+                    # emojis.append(self.hmwConfEmojis['crossEmoji'])
+
+                elif str(reaction) == self.hmwConfEmojis["checkEmoji"]:
+                    ######## Informing that a doc will be added to an homework
+                    (msgBack, emojis) = self.hmwManager.setDocStatus(user.id)
+                    newMsg += msgBack
+
+                elif str(reaction) == self.hmwConfEmojis["crossEmoji"]:
+                    ######## Cancel homework creation
+                    (deleteStatus, deleteMsg) = await self.deleteAll(user, reaction.message.channel.id)
+                    if deleteStatus:
+                        hmwCancelled = True
+                        newMsg += deleteMsg
+
+                elif str(reaction) == self.hmwConfEmojis["backEmoji"]:
+                    ######## Cancel last modification
+                    (msgBack, emojis) = self.hmwManager.updateHmw(user.id, None, True)
+                    newMsg += msgBack
+
+                elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
+                    ######## Validate new homework and send it to the database
+                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.insertNewDict(user.id)
+                    newMsg += msgBack
+                    ######## Selecting the right text channel to send the homework documents
+                    if chanID:
+                        channel = reaction.message.channel.guild.get_channel(int(chanID))
+                        for doc in hmwDocList:
+                            docFile = await doc.to_file()
+                            await channel.send(file = docFile)
+                            await sleep(0.01)
+                    await self.updateHmwChannel(reaction.message.channel.guild, None)
+                    hmwComplete = True
+
+                elif str(reaction) in self.numberEmojis:
+                    ######## User clicked on a reaction corresponding to a numberW
+                    (msgBack, emojis) = self.hmwManager.numberedAction(user.id, self.numberEmojis.index(str(reaction)))
+                    newMsg += msgBack
+
+                if newMsg is not None:
+                    ######## Sending the new message to the channel + deleting old message
+                    await self.updateBotMsgFromUserReac(user, reaction.message.channel, newMsg, emojis, hmwComplete, hmwCancelled)
+
+            else:
+                # Over 15 seconds
+                if reacTime > SchoolBot.MAX_WAITING_TIME:
+                    # Over 2 minutes
+                    print(f"SCHOOLBOT - Over 2 min - ReacTime: {reacTime} --> Deleting hmw")
+                else:
+                    print(f"SCHOOLBOT - Over 15sec - ReacTime: {reacTime} --> Deleting hmw")
+                    # Maybe you want to reset the timer ? Add this part here
+                    # For the moment --> doing nothing
+                await self.deleteAll(user, reaction.message.channel.id)
+                return
+        else:
+            # User who reacted to the message didn't create any homework
+            print(f"No homework corresponding to user {user}")
+            pass
+
+    ##########
+    ##########
+    ## UTILITY FUNCTIONs
+    ##########
+    ##########
 
     def userRoleCheck(self, userRoles):
         roleCol = self.mDB[self.dbStruct['db_collections']['role']]
@@ -122,178 +263,30 @@ class SchoolBot(commands.Cog):
 
         return (deleteStatus, deleteMsg)
 
+    async def updateBotMsgFromUserMsg(self, user, userMsg, msgToSend, reacToAdd):
+        if user in self.hmwChecker:
+            await self.hmwChecker[user]['botMsg'].delete()
+            self.hmwChecker[user]['userMsgList'].append(userMsg)
+        botMsg = await userMsg.channel.send(msgToSend)
+        if user in self.hmwChecker:
+            self.hmwChecker[user]['botMsg'] = botMsg
+        for emoji in reacToAdd:
+            await botMsg.add_reaction(emoji)
 
-    @commands.Cog.listener('on_message')
-    async def messageListener(self, message):
-        if message.author == self.schoolBot.user:
-            return
-        
-        if self.userRoleCheck(message.author.roles) and self.hmwManager.checkHmw(message.author.id, message.channel.id):
-            # User have previously created an Homework object and is writing in the same channel
-            if self.hmwManager.checkHmwValidity(message.author.id):
-                # User's created Homework object is still valid
-                if len(message.attachments) == 0:
-                    [resMsg, emojiList] = self.hmwManager.updateHmw(message.author.id, message.content)
-                    if resMsg is not None:
-                        newMsg = f"{message.author.mention}\n"
-                        newMsg += resMsg
-
-                        if message.author in self.hmwChecker:
-                            await self.hmwChecker[message.author]['botMsg'].delete()
-                            self.hmwChecker[message.author]['userMsgList'].append(message)
-
-                        newBotMsg = await message.channel.send(newMsg)
-
-                        if message.author in self.hmwChecker:
-                            self.hmwChecker[message.author]['botMsg'] = newBotMsg
-
-                        for emoji in emojiList:
-                            await newBotMsg.add_reaction(emoji)
-                    else:
-                        print("SCHOOLBOT - HOMEWORK_MAN updateHmw() returned None")
-                else:
-                    # Message contains a file
-                    newMsg = f"{message.author.mention}\n"
-                    (msgBack, emojiList) = self.hmwManager.setHmwDoc(message.author.id, message.attachments)
-                    newMsg += msgBack
-
-                    if message.author in self.hmwChecker:
-                        await self.hmwChecker[message.author]['botMsg'].delete()
-                        self.hmwChecker[message.author]['userMsgList'].append(message)
-
-                    newBotMsg = await message.channel.send(newMsg)
-
-                    if message.author in self.hmwChecker:
-                        self.hmwChecker[message.author]['botMsg'] = newBotMsg
-
-                    for emoji in emojiList:
-                        await newBotMsg.add_reaction(emoji)
-            else:
-                await message.channel.send("Homework too old --> Has been deleted")
-                await self.deleteAll(message.author, message.channel.id)
+    async def updateBotMsgFromUserReac(self, user, userChannel, msgToSend, reacToAdd, hmwComplete, hmwCancelled):
+        if user in self.hmwChecker:
+            await self.hmwChecker[user]['botMsg'].delete()
+            self.hmwChecker[user]['botMsg'] = None
+            if hmwComplete:
+                await self.deleteAll(user, userChannel.id)
+        if hmwComplete or hmwCancelled:
+            botMsg = await userChannel.send(msgToSend, delete_after= SchoolBot.DELETE_TIME_WAIT)
         else:
-            # Casual talker, not configuring any homework at the moment
-            pass
-    
-    # Listen to all reactions added on msg on the server
-    @commands.Cog.listener('on_reaction_add')
-    async def reactionListener(self, reaction, user):
-        ## IGNORE BOT REACTIONS
-        if user == self.schoolBot.user:
-            return
-
-        ## HOMEWORK REACTION MANAGEMENT
-        if self.userRoleCheck(user.roles) and user in self.hmwChecker and reaction.message.id == self.hmwChecker[user]['botMsg'].id:
-            reactionDate = datetime.datetime.utcnow()
-            reacTime = (reactionDate - reaction.message.created_at).total_seconds()
-            if  reacTime < SchoolBot.MAX_REACTION_TIME:
-                # User reacted within MAX_REACTION_TIME seconds
-
-                newMsg = f"{user.mention}\n"
-                emojis = []
-                userAction = None
-                hmwComplete = False
-                hmwCancelled = False
-
-                if str(reaction) == self.hmwManagementEmojis["newHmwEmoji"]:
-                    ######## Adding a new homework
-                    userAction = "Ajout"
-                    newMsg += self.hmwManager.newHmw(user.id, 0, reaction.message.channel.id, reaction.message.id)
-                    emojis.append(self.hmwConfEmojis["crossEmoji"])
-
-                elif str(reaction) == self.hmwManagementEmojis["editHmwEmoji"]:
-                    ######## Editing an existing homework
-                    userAction = "Édition"
-                    #TODO: À COMPLÉTER
-                    newMsg += "Edition mode is not implemented yet"
-                    # await reaction.message.channel.send(newMsg, delete_after = SchoolBot.DELETE_TIME_WAIT)
-                    hmwComplete = True
-
-                elif str(reaction) == self.hmwManagementEmojis["delHmwEmoji"]:
-                    ######## Deleting an existing homework
-                    userAction = "Suppression"
-                    #TODO: À COMPLÉTER
-                    newMsg += "Deletion mode is not implemented yet"
-                    # await reaction.message.channel.send(newMsg, delete_after = SchoolBot.DELETE_TIME_WAIT)
-                    hmwComplete = True
-
-                elif str(reaction) == self.hmwConfEmojis["checkEmoji"]:
-                    ######## Informing that a doc will be added to an homework
-                    (msgBack, emojis) = self.hmwManager.setDocStatus(user.id)
-                    newMsg += msgBack
-
-                elif str(reaction) == self.hmwConfEmojis["crossEmoji"]:
-                    ######## Cancel homework creation
-                    (deleteStatus, deleteMsg) = await self.deleteAll(user, reaction.message.channel.id)
-                    if deleteStatus:
-                        hmwCancelled = True
-                        newMsg += deleteMsg
-
-                elif str(reaction) == self.hmwConfEmojis["backEmoji"]:
-                    ######## Cancel last modification
-                    (msgBack, emojis) = self.hmwManager.updateHmw(user.id, None, True)
-                    newMsg += msgBack
-
-                elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
-                    ######## Validate new homework and send it to the database
-                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.insertNewDict(user.id)
-                    newMsg += msgBack
-
-                    ######## Selecting the right text channel to send the homework documents
-                    channel = reaction.message.channel.guild.get_channel(int(chanID))
-                    for doc in hmwDocList:
-                        docFile = await doc.to_file()
-                        await channel.send(file = docFile)
-                        await sleep(0.01)
-                    
-                    await self.updateHmwChannel(reaction.message.channel.guild, None)
-
-                    hmwComplete = True
-
-                elif str(reaction) in self.numberEmojis:
-                    (msgBack, emojis) = self.hmwManager.correctSubVal(user.id, self.numberEmojis.index(str(reaction)))
-                    newMsg += msgBack
-
-                if newMsg is not None:
-                    ######## Sending the new message to the channel + deleting old message
-                    if user in self.hmwChecker:
-                        await self.hmwChecker[user]['botMsg'].delete()
-                        self.hmwChecker[user]['botMsg'] = None
-                        if hmwComplete:
-                            await self.deleteAll(user, reaction.message.channel.id)
-
-                    if hmwComplete or hmwCancelled:
-                        botMsg = await reaction.message.channel.send(newMsg, delete_after= SchoolBot.DELETE_TIME_WAIT)
-                    else:
-                        botMsg = await reaction.message.channel.send(newMsg)
-
-                    if user in self.hmwChecker:
-                        self.hmwChecker[user]['botMsg'] = botMsg
-
-                    for emoji in emojis:
-                        await botMsg.add_reaction(emoji)
-            else:
-                # Over 15 seconds
-                await self.deleteAll(user, reaction.message.channel.id)
-                if reacTime > SchoolBot.MAX_WAITING_TIME:
-                    # Over 2 minutes
-                    print("Deleting hmw")
-                    await self.deleteAll(user, reaction.message.channel.id)
-                    return
-                else:
-                    # Maybe you want to reset the timer ? Add this part here
-                    # For the moment --> doing nothing
-                    pass
-        else:
-            # User who reacted to the message didn't create any homework
-            print(f"No homework corresponding to user {user}")
-            pass
-
-    ##########
-    ##########
-    ## UTILITY FUNCTIONs
-    ##########
-    ##########
+            botMsg = await userChannel.send(msgToSend)
+        if user in self.hmwChecker:
+            self.hmwChecker[user]['botMsg'] = botMsg
+        for emoji in reacToAdd:
+            await botMsg.add_reaction(emoji)
 
     async def updateHmwChannel(self, guild, updatedHmwList):
         hmwChannel = guild.get_channel(int(SchoolBot.HOMEWORK_DISPLAY_CHANNEL_ID))
