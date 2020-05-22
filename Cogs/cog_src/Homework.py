@@ -41,6 +41,7 @@ class Homework():
         self._creator = creator
         self._creationDate = datetime.datetime.utcnow()
         self._suggestedSubject = suggSubject
+        self._selectedSubject = None
         self._observer = observerFunc
 
         self._userAction = userAction
@@ -48,7 +49,9 @@ class Homework():
         self._lastChange = []
         self._lastError = ""
         self._inDB = False
+        self._moreDocInDB = False
         self._isComplete = False
+        self._hmwPageIdx = 0
 
         self._name = ""
         self._docAwaited = False
@@ -107,6 +110,10 @@ class Homework():
         return self._suggestedSubject
 
     @property
+    def selectedSubject(self):
+        return self._selectedSubject
+
+    @property
     def userAction(self):
         return self._userAction
 
@@ -137,8 +144,16 @@ class Homework():
         return self._inDB
 
     @property
+    def moreDocInDB(self):
+        return self._moreDocInDB
+
+    @property
     def isComplete(self):
         return self._isComplete
+
+    @property
+    def hmwPageIdx(self):
+        return self._hmwPageIdx
 
     @property
     def name(self):
@@ -180,6 +195,10 @@ class Homework():
     ##########
     ##########
 
+    @selectedSubject.setter
+    def selectedSubject(self, value):
+        self._selectedSubject = value
+
     @userAction.setter
     def userAction(self, value):
         self._userAction = value
@@ -201,9 +220,17 @@ class Homework():
     def inDB(self, value):
         self._inDB = value
 
+    @moreDocInDB.setter
+    def moreDocInDB(self, value):
+        self._moreDocInDB = value
+
     @isComplete.setter
     def isComplete(self, value):
         self._isComplete = value
+
+    @hmwPageIdx.setter
+    def hmwPageIdx(self, value):
+        self._hmwPageIdx = value
 
     @name.setter
     def name(self, value):
@@ -383,6 +410,9 @@ class Homework():
                         self.subject = value
                         res = res.substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
 
+                        # Reset this variable (even if not used)
+                        self.subjectChoice = []
+
                         # Unicity check
                         self._observer(self.id)
                     else:
@@ -433,6 +463,10 @@ class Homework():
                     if value in self.subjectDBList:
                         # Subject input exist in DB
                         self.subject = value
+
+                        # Reset this variable (even if not used)
+                        self.subjectChoice = []
+
                         res = res.substitute(hmwList = '')
                     else:
                         # Subjet input doesn't exist in DB
@@ -491,6 +525,9 @@ class Homework():
             res = res.substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
             self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.suggSubject)
 
+            # Reset this variable (even if not used)
+            self.subjectChoice = []
+
             # Activate the HomeworkManager observer to check the unicity of the new homework
             self._observer(self.id)
         else:
@@ -501,6 +538,9 @@ class Homework():
                     res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state].substitute(dateFormat = Homework.DATE_FORMAT['str'], dateExample = datetime.datetime.now().strftime(Homework.DATE_FORMAT['datetime']))
                     self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.subjectChoice[voteIdx])
                     # print(f"HOMEWORK - Last change: {self.lastChange}")
+
+                    # Reset this variable (even if not used)
+                    self.subjectChoice = []
 
                     # Activate the HomeworkManager observer to check the unicity of the new homework
                     self._observer(self.id)
@@ -522,14 +562,30 @@ class Homework():
             res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state]
             res = res.substitute(hmwList = '')
             self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.suggSubject)
-        else:
+        elif self.state == Homework.HMW_STATES[2]:
             # Already in 'Subject' state --> user is choosing between the possible subject from its input
-            if number < len(self.subjectChoice):
-                if self.state == Homework.HMW_STATES[2]:
+            if len(self.subjectChoice) > 0:
+                # User selecting a subject in reaction after trying to enter one by message
+                if (self.state == Homework.HMW_STATES[2] and number < len(self.subjectChoice)):
                     # Subject
                     self.subject = self.subjectChoice[number]
                     res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state].substitute(hmwList = '')
                     self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.subjectChoice[number])
+
+                    # Reset this variable (even if not used)
+                    self.subjectChoice = []
             else:
-                pass
+                # User selecting an homework from the displayed numbered list
+                number = number + 1 # Resetting the official value from the parameter (reduced in HomeworkManager)
+                self._observer(self.id, number) # Sets the selected homework in the self.selectedSubject
+
+                self.updateState(False)
+
+                self.lastChange = HomeworkMessage.HMW_CONF['homeworkChosen'].substitute(nomDevoir = self.selectedSubject['name'])
+                hmwDesc = HomeworkMessage.HMW_DESC['global'].substitute(subject = self.selectedSubject['subject'], nom = self.selectedSubject['name'], status = 'None', date = self.selectedSubject['deadline'].strftime(Homework.DATE_FORMAT['datetime']))
+                res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state].substitute(hmwToDelete = hmwDesc)
+                self.isComplete = True
+        else:
+            #Other state ?
+            pass
         return res

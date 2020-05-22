@@ -10,7 +10,7 @@ class HomeworkMessage():
         "back": Template("\n\t$emoji - Annuler dernière action"),
         "addFile": Template("\n\t$emoji - Ajouter un document au devoir"),
         "modifConf": Template("\n\t$emoji - Confirmer $userAction du devoir"),
-        "nextHmwList": Template("\n\t$emoji - Afficher plus de devoirs"),
+        "nextElemsInDB": Template("\n\t$emoji - Afficher plus de devoirs"),
 
         "subjectSuggested": Template("\nLa matière '$subject' vous est suggérée, vous pouvez la sélectionner en cliquant sur la réaction $reac"),
         "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
@@ -54,6 +54,7 @@ class HomeworkMessage():
         "subject": Template("+ Matière '$var' a bien été enregistrée +"),
         "docUpdated": Template("+ Autorisation d'associer un fichier à ce devoir. +\nLes prochains fichiers que vous enverrez dans ce salon seront liés à ce devoir"),
         "docAdded": Template("+ Document '$docName' a bien été ajouté +\n"),
+        "homeworkChosen": Template("+ Le devoir '$nomDevoir' a été sélectionné +\n"),
 
         "cancelledAction": Template("+ Dernière action '$oldVal' annulée +"),
         "cancelledDoc": Template("+ Les fichiers ne sont désormais plus autorisés +"),
@@ -71,9 +72,9 @@ class HomeworkMessage():
         "backMessage": Template("+ Dernière modification ($lastModif) a bien été annulée +"),
         "cancelMessage": Template("+ $userAction du devoir a bien été annulé +"),
 
-        "dbUpdated": Template("+ Devoir enregistré dans la base de données +"),
-        "hmwDEdited": Template("+ Devoir édité dans la base de données +"),
-        "hmwDDeleted": Template("+ Devoir supprimé de la base de données +"),
+        "hmwAddedInDB": Template("+ Devoir enregistré dans la base de données +"),
+        "hmwEditedInDB": Template("+ Devoir édité dans la base de données +"),
+        "hmwDeletedInDB": Template("+ Devoir supprimé de la base de données +"),
 
         "hmwDeleted": Template("+ Devoir en cours de création a été supprimé +")
     }
@@ -86,8 +87,13 @@ class HomeworkMessage():
     }
 
     @classmethod
-    def stateDisplayer(cls, stateNum):
-        stateFR = ['Nom', 'Matiere', 'Date', 'Statut', 'Document']
+    def stateDisplayer(cls, hmwUserAction, stateNum):
+        if hmwUserAction == "hmwAdd":
+            stateFR = ['Nom', 'Matiere', 'Date', 'Statut', 'Document']
+        elif hmwUserAction == "hmwDelete":
+            stateFR = ['Matière', 'Devoir']
+        elif hmwUserAction == "hmwDelete":
+            stateFR = ['Matière', 'Devoir']
         # if stateNum > 0:
         if stateNum == 0:
             res = '[' + stateFR[0] + '] -> '

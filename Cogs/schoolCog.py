@@ -59,7 +59,7 @@ class SchoolBot(commands.Cog):
 
         self.hmwManagementEmojis = {}
         self.hmwConfEmojis = {}
-        self.numberEmojis = []
+        self.numberEmojis = [i for i in range(0, 10)]
 
         self.hmwManagementEmojis["newHmwEmoji"] = reactDB.find_one({nameField: 'add'}, {idField: 0, valueField: 1})[valueField]
         self.hmwManagementEmojis["editHmwEmoji"] = reactDB.find_one({nameField: 'edit'}, {idField: 0, valueField: 1})[valueField]
@@ -69,9 +69,10 @@ class SchoolBot(commands.Cog):
         self.hmwConfEmojis["crossEmoji"] = reactDB.find_one({nameField: 'cross'}, {idField: 0, valueField: 1})[valueField]
         self.hmwConfEmojis["backEmoji"] = reactDB.find_one({nameField: 'back'}, {idField: 0, valueField: 1})[valueField]
         self.hmwConfEmojis["validHmwEmoji"] = reactDB.find_one({nameField: 'confModif'}, {idField: 0, valueField: 1})[valueField]
+        self.hmwConfEmojis["nextElemsInDB"] = reactDB.find_one({nameField: 'nextElem'}, {idField: 0, valueField: 1})[valueField]
 
         for numberEmoji in reactDB.find({utilityField: 'number'}, {idField: 0, nameField:1, valueField:1}):
-            self.numberEmojis.append(numberEmoji[valueField])
+            self.numberEmojis[int(numberEmoji[nameField])] = numberEmoji[valueField]
 
          # Subject colletion elements
         self.subCol = self.mDB[self.dbStruct['db_collections']['subject']]
@@ -172,7 +173,7 @@ class SchoolBot(commands.Cog):
 
                 elif str(reaction) == self.hmwConfEmojis["checkEmoji"]:
                     ######## Informing that a doc will be added to an homework
-                    (msgBack, emojis) = self.hmwManager.setDocStatus(user.id)
+                    (msgBack, emojis) = self.hmwManager.checkedHomework(user.id)
                     newMsg += msgBack
 
                 elif str(reaction) == self.hmwConfEmojis["crossEmoji"]:
@@ -189,7 +190,7 @@ class SchoolBot(commands.Cog):
 
                 elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
                     ######## Validate new homework and send it to the database
-                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.insertNewDict(user.id)
+                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.validateHmwChange(user.id)
                     newMsg += msgBack
                     ######## Selecting the right text channel to send the homework documents
                     if chanID:
@@ -200,6 +201,10 @@ class SchoolBot(commands.Cog):
                             await sleep(0.01)
                     await self.updateHmwChannel(reaction.message.channel.guild, None)
                     hmwComplete = True
+
+                elif str(reaction) == self.hmwConfEmojis["nextElemsInDB"]:
+                    ######## Display more available homeworks
+                    pass
 
                 elif str(reaction) in self.numberEmojis:
                     ######## User clicked on a reaction corresponding to a numberW
