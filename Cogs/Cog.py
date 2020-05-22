@@ -175,6 +175,7 @@ class Test(commands.Cog):
                 is_reaction_good = False
                 for emoji_in_embed in embeded_msg.reactions:
                     if len(list(self.db.professeur.find({'id': reaction.user_id}))) >= 1 and emoji_in_embed.count >= 2:
+                        is_reaction_good = True
                         print(emoji_in_embed)
 
                 if is_reaction_good == True:
@@ -849,7 +850,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 ### METTRE EN PLACE ENVOI DE FICHIER
                 # await prof.send(content=f"{channel_obj['subject']} : {message.author.nick} : {message.content}", file=discord.File(fp=io.BytesIO(buffer), filename=filename))
                 confirmation = await recv_chan.send(content=f"{std_name.title()} : a envoyé un fichier")
-                #await self.hmw_msg_verifier(hmw_list[int(reaction_nb)-1][0], message.author.id, hmw_list[int(reaction_nb)-1][1])
+                await self.hmw_msg_verifier(hmw_list[int(reaction_nb)-1][0], message.author.id, hmw_list[int(reaction_nb)-1][1])
                 await confirmation.delete()
                 bot_msg = await send_chan.send(content=f"<@{message.author.id}>, le message a bien été reçu")
             await asyncio.sleep(30)
