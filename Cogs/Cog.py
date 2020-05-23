@@ -30,7 +30,10 @@ class Test(commands.Cog):
         self.correction_selec = ""
 
     async def hmw_table_img_creation(self, subject):
-        all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': datetime.datetime.now()}}).sort("deadline"))
+        utcDate = datetime.datetime.utcnow()
+        thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+        all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
+        #all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
         #all_hmw = await self.homework_date_sorting(all_hmw)
 
         if len(all_hmw) == 0:
@@ -171,7 +174,6 @@ class Test(commands.Cog):
                 recv_channel = self.bot.get_channel(reaction.channel_id)
                 embeded_msg = await recv_channel.fetch_message(reaction.message_id)
                 hmw_name_list = self.db.hmw_table.find({'recv_chan_id': reaction.channel_id})[0]['subject_hmw_list']
-
                 is_reaction_good = False
                 for emoji_in_embed in embeded_msg.reactions:
                     if len(list(self.db.professeur.find({'id': reaction.user_id}))) >= 1 and emoji_in_embed.count >= 2:
@@ -186,6 +188,12 @@ class Test(commands.Cog):
                         teacher = self.bot.get_user(reaction.user_id)
                         print(hmw_chosen)
                         subject = self.db.send_recv_channels.find({'chan_recv_id': reaction.channel_id})[0]['subject']
+                        utcDate = datetime.datetime.utcnow()
+                        thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+                        dvr = self.db.devoir.find({'subject': subject, 'name': hmw_chosen}).sort('publish_date')
+                        print("counted : ", self.db.student_hmw.count_documents({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}}))
+                        print("hwm : ", self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}})[0])
+
                         hmw_line = f"+         Devoir : {hmw_chosen.title()} "
                         while len(hmw_line) != 41:
                             if len(hmw_line) < 40:
@@ -282,22 +290,26 @@ class Test(commands.Cog):
                 print(e)
                 return
 
-
+    @commands.command()
+    async def hmwinrange(self, ctx, subject):
+        utcDate = datetime.datetime.utcnow()
+        thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+        hmws = self.db.devoir.find({'subject':subject, 'deadline': {'$gte':thisDay}}).sort('deadline')
+        nbRes = self.db.devoir.count_documents({'subject':'math', 'deadline': {'$gte':thisDay}})
+        for hmw in hmws:
+            print(hmw['deadline'])
+        print(nbRes)
 
     @commands.command()
     async def force_table_verifier(self, ctx, subject):
         await ctx.message.delete()
         await self.hmw_msg_verifier(subject)
 
-
-
     @commands.command()
     async def ping(self, ctx):
         pong = await ctx.message.channel.send("Pong !")
         await asyncio.sleep(15)
         await pong.delete()
-
-
 
     @commands.command(aliases=['eleve','élève','élèves','éleve','éleves','elève','elèves'])
     async def eleves(self, ctx):
@@ -597,7 +609,9 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     for nb in range(1, len(all_sended_hmw)+1):
                         all_number.append(self.db.emoji.find({"name":str(nb)})[0]['value'])
 
-                    if reaction not in all_number or self.db.emoji.find({'value':str(reaction)})[0]['name'] == "cross":
+                    print("reaction", reaction)
+                    print("reaction type", type(reaction))
+                    if str(reaction) not in all_number or self.db.emoji.find({'value':str(reaction)})[0]['name'] == "cross":
                         correction_selec = await ctx.channel.send("Annulation de la commande..")
                         await asyncio.sleep(10)
                         await correction_selec.delete()
@@ -764,7 +778,9 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         print("anyway this is good")
                         pass
             try:
-                all_hmw = list(self.db.devoir.find({'subject': channel_obj['subject']}).sort("deadline"))
+                utcDate = datetime.datetime.utcnow()
+                thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+                all_hmw = list(self.db.devoir.find({'subject': channel_obj['subject'], 'deadline': {'$gte': thisDay}}).sort("deadline"))
                 if len(all_hmw) == 0:
                     errormsg = await message.channel.send("```Aucun devoir pour cette matière```")
                     await asyncio.sleep(15)
