@@ -51,7 +51,7 @@ class HomeworkManager():
             'name': dbStructJson['db_collections']['emoji_fields']['name'],
             'value': dbStructJson['db_collections']['emoji_fields']['value']
         }
-        self.emojiNumber = [self.hmwEmojiCol.find_one({self.emojiFields['name']: str(a)}, {self.emojiFields['id']: 0, self.emojiFields['value']:1})[self.emojiFields['value']] for a in range(0,9)]
+        self.emojiNumber = [self.hmwEmojiCol.find_one({self.emojiFields['name']: str(a)}, {self.emojiFields['id']: 0, self.emojiFields['value']:1})[self.emojiFields['value']] for a in range(0,10)]
         self.emojiList = {
             HomeworkManager.HMW_EMOJIS[0] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'back'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']],
             HomeworkManager.HMW_EMOJIS[1] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'cross'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']],
@@ -238,6 +238,7 @@ class HomeworkManager():
 
     def listHmwBySubject(self, creatorID, minIdx = 0):
         currentHmw = self.homeworks[creatorID]
+        self.numberedHmwList[creatorID] = []
 
         utcDate = datetime.utcnow()
         thisDay = datetime(utcDate.year, utcDate.month, utcDate.day)
@@ -249,7 +250,7 @@ class HomeworkManager():
         formatedHmwList = f"* {currentHmw.subject}"
         counter = 0
         for hmwDate in datedHmw:
-            if (counter >= minIdx and counter < (minIdx + 10)) :
+            if ((counter + len(datedHmw[hmwDate])) > minIdx and counter < (minIdx + 10)) :
                 formatedHmwList += f"\n\t* {hmwDate} :"
                 for hmw in datedHmw[hmwDate]:
                     if (counter < (minIdx + 10)):
@@ -261,10 +262,10 @@ class HomeworkManager():
                     else:
                         break
             elif (counter < minIdx):
-                counter += 1
+                counter += len(datedHmw[hmwDate])
             else:
                 break
-
+        
         if counter < (nbRes - 1):
             currentHmw.moreDocInDB = True
         else:
@@ -272,7 +273,6 @@ class HomeworkManager():
         return (formatedHmwList, emojis)
 
     def newHmw(self, creatorID, hmwAction, channelID, botMsgID):
-        print(f"HOMEWORK_MAN - Creating a new homework for {creatorID} in mode {HomeworkManager.HMW_ACTIONS[hmwAction]}")
         suggestedSubject = self.chanCol.find_one({self.chanFields['chanID']: str(channelID)})[self.chanFields['subject']]
 
         self.homeworks[creatorID] = Homework(creatorID, HomeworkManager.HMW_ACTIONS[hmwAction], self.hmwObserver, self.subjectList, suggestedSubject)
@@ -286,14 +286,12 @@ class HomeworkManager():
         emojiIDs = [HomeworkManager.HMW_EMOJIS[1]] # Cancel emoji
         if HomeworkManager.HMW_ACTIONS[hmwAction] == "hmwAdd":
             self.actionMsgDict[creatorID] = HomeworkMessage.HMW_ADD
-            msgBack = HomeworkMessage.HMW_ADD[self.homeworks[creatorID].state].substitute()
         elif HomeworkManager.HMW_ACTIONS[hmwAction] == "hmwEdit":
             self.actionMsgDict[creatorID] = HomeworkMessage.HMW_EDIT
-            msgBack = HomeworkMessage.HMW_EDIT[self.homeworks[creatorID].state].substitute()
         elif HomeworkManager.HMW_ACTIONS[hmwAction] == "hmwDelete":
             self.actionMsgDict[creatorID] = HomeworkMessage.HMW_DELETE
-            msgBack = HomeworkMessage.HMW_DELETE[self.homeworks[creatorID].state].substitute()
             self.suggestedSubject[creatorID] = True
+        msgBack = self.actionMsgDict[creatorID][self.homeworks[creatorID].state].substitute()
         return self.formatBackMsg(self.homeworks[creatorID], self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, True, msgBack, True, self.homeworks[creatorID].moreDocInDB)
 
     def deleteHmw(self, creatorID, channelID):
@@ -312,7 +310,7 @@ class HomeworkManager():
                 emojiIDs.append(HomeworkManager.HMW_EMOJIS[2])
             emojiIDs.append(HomeworkManager.HMW_EMOJIS[3])
 
-        if moreInDBStatus:
+        if (currentHmw.userAction == HomeworkManager.HMW_ACTIONS[2] and currentHmw.state == Homework.HMW_STATES[2] and moreInDBStatus):
             emojiIDs.append(HomeworkManager.HMW_EMOJIS[4])
 
         res = ""
@@ -364,19 +362,19 @@ class HomeworkManager():
             return (None, None)
 
         emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
+        hmwEmojis = []
         if not isBack:
             if not currentHmw.isComplete:
                 # Send the new value to the corresponding homework
                 (updateRes, msgBack) = currentHmw.updateVal(value, isBack)
 
-                hmwEmojis = []
                 if currentHmw.inDB:
                     msgBack = HomeworkMessage.HMW_UTILS['inDB'].substitute(oldName = currentHmw.name)
                 if currentHmw.userAction == HomeworkManager.HMW_ACTIONS[2]:
                     ##### HMW_DELETE
-                    (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID)
+                    (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID, 10 * currentHmw.hmwPageIdx)
+                    # currentHmw.hmwPageIdx += 1
                     msgBack = self.actionMsgDict[creatorID][currentHmw.state].substitute(hmwList = hmwList)
-                    currentHmw.hmwPageIdx += 1
 
                 (res, emojis) = self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, updateRes, msgBack, False, currentHmw.moreDocInDB)
                 emojis = emojis + hmwEmojis
@@ -386,7 +384,23 @@ class HomeworkManager():
             if currentHmw.isComplete:
                 currentHmw.isComplete = False
             (updateRes, msgBack) = currentHmw.updateVal(value, isBack)
-            return self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, updateRes, msgBack, False, currentHmw.moreDocInDB)
+
+            if currentHmw.userAction == HomeworkManager.HMW_ACTIONS[2]:
+                #HMW_DELETE
+                if currentHmw.state == Homework.HMW_STATES[0]:
+                    #idle
+                    currentHmw.moreDocInDB = False
+                    pass
+                elif currentHmw.state == Homework.HMW_STATES[2]:
+                    #subject
+                    (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID, 10 * currentHmw.hmwPageIdx)
+                    msgBack = self.actionMsgDict[creatorID][currentHmw.state].substitute(hmwList = hmwList)
+                elif currentHmw.state == Homework.HMW_STATES[1]:
+                    #name
+                    pass
+            (res, emojis) = self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, updateRes, msgBack, False, currentHmw.moreDocInDB)
+            emojis = emojis + hmwEmojis
+            return (res, emojis)
 
     def setHmwDoc(self, creatorID, msgAttachments):
         try:
@@ -481,9 +495,8 @@ class HomeworkManager():
             msgBack = currentHmw.numberedDeleteAction(voteIdx - 1)
             if currentHmw.state == Homework.HMW_STATES[2]:
                 # Homework in state 'subject'
-                (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID)
+                (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID, 10 * currentHmw.hmwPageIdx)
                 msgBack = self.actionMsgDict[creatorID][currentHmw.state].substitute(hmwList = hmwList)
-                currentHmw.hmwPageIdx += 1
                 (res, emojis) = self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, True, msgBack, False, currentHmw.moreDocInDB)
                 emojis = emojis + hmwEmojis
                 return (res, emojis)
@@ -499,9 +512,10 @@ class HomeworkManager():
         currentHmw = self.homeworks[creatorID]
         emojiIDs = [HomeworkManager.HMW_EMOJIS[0], HomeworkManager.HMW_EMOJIS[1]]
 
+        currentHmw.hmwPageIdx += 1
         (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID, 10 * currentHmw.hmwPageIdx)
         msgBack = self.actionMsgDict[creatorID][currentHmw.state].substitute(hmwList = hmwList)
-        currentHmw.hmwPageIdx += 1
+        # currentHmw.hmwPageIdx += 1
         (res, emojis) = self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, True, msgBack, False, currentHmw.moreDocInDB)
         emojis = emojis + hmwEmojis
         return (res, emojis)

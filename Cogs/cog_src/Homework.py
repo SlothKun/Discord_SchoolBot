@@ -315,6 +315,12 @@ class Homework():
                 else:
                     # No more docs, switch back to previous state (status)
                     self.state = Homework.HMW_STATES_SEQ[self.userAction][max(0, self.stateIdx - 1)]
+            elif self.userAction == Homework.HMW_USER_ACTION[2] and self.state == Homework.HMW_STATES[2]:
+                # HMW_DELETE and state = 'subject'
+                if self.hmwPageIdx <= 0:
+                    self.state = Homework.HMW_STATES_SEQ[self.userAction][max(0, self.stateIdx - 1)]
+                else:
+                    self.hmwPageIdx -= 1
             else:
                 self.state = Homework.HMW_STATES_SEQ[self.userAction][max(0, self.stateIdx - 1)]
         else:
@@ -324,14 +330,14 @@ class Homework():
         res = None
         updateRes = True
         emojis = []
+        self.updateState(isBack)
+        res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state]
         if isBack:
             # Canceling last modification
+            confMsg = 'cancelledAction'
+            oldValue = ""
             if self.userAction == Homework.HMW_USER_ACTION[0]:
                 ##### HMW_ADD
-                self.updateState(isBack)
-                res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state]
-                confMsg = 'cancelledAction'
-                oldValue = ""
                 if self.state == Homework.HMW_STATES[0]:
                     #Idle
                     oldValue = self.name
@@ -364,7 +370,6 @@ class Homework():
                     self.isComplete = True
                     oldValue = self.lastDeletedDoc
                     res = res.substitute(hmwRecap = self)
-                self.lastChange = HomeworkMessage.HMW_CONF[confMsg].substitute(oldVal = oldValue)
 
             elif self.userAction == Homework.HMW_USER_ACTION[1]:
                 ##### EDIT
@@ -372,10 +377,20 @@ class Homework():
 
             elif self.userAction == Homework.HMW_USER_ACTION[2]:
                 ##### DELETE
-                pass
+                if self.state == Homework.HMW_STATES[0]:
+                    #Idle
+                    oldValue = self.subject
+                    res = res.substitute()
+                elif self.state == Homework.HMW_STATES[2]:
+                    #Subject
+                    if self.selectedSubject:
+                        oldValue = self.selectedSubject['name']
+                    res = res.substitute(hmwList = '')
+                elif self.state == Homework.HMW_STATES[1]:
+                    #Name
+                    pass
+            self.lastChange = HomeworkMessage.HMW_CONF[confMsg].substitute(oldVal = oldValue)
         else:
-            self.updateState(isBack)
-            res = Homework.HMW_ACTION_MSG_DIC[self.userAction][self.state]
             if self.userAction == Homework.HMW_USER_ACTION[0]:
                 ##### HMW_ADD
                 if self.state == Homework.HMW_STATES[1]:
@@ -468,6 +483,7 @@ class Homework():
                         self.subjectChoice = []
 
                         res = res.substitute(hmwList = '')
+                        self.lastChange = HomeworkMessage.HMW_CONF[self.state].substitute(var = self.suggSubject)
                     else:
                         # Subjet input doesn't exist in DB
                         updateRes = False
