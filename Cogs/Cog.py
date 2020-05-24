@@ -29,6 +29,10 @@ class Test(commands.Cog):
         self.hmw_selection = ""
         self.correction_selec = ""
 
+    async def hmw_sorting(self, list):
+        print("lol")
+
+
     async def hmw_table_img_creation(self, subject):
         utcDate = datetime.datetime.utcnow()
         thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
@@ -193,14 +197,12 @@ class Test(commands.Cog):
                         dvr = self.db.devoir.find({'subject': subject, 'name': hmw_chosen}).sort('publish_date')
                         print("counted : ", self.db.student_hmw.count_documents({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}}))
                         print("hwm : ", self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}})[0])
-
                         hmw_line = f"+         Devoir : {hmw_chosen.title()} "
                         while len(hmw_line) != 41:
                             if len(hmw_line) < 40:
                                 hmw_line += " "
                             elif len(hmw_line) == 40:
                                 hmw_line += "+"
-
                         subject_line = f"+         Matière : {subject.title()} "
                         while len(subject_line) != 41:
                             if len(subject_line) < 40:
