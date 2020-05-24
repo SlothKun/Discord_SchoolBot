@@ -1,1 +1,0 @@
-{"options":{},"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_","ns":"schoolBot.professeur"}],"uuid":"0118e5e87ab047c9a1630d29d3ea865d"}
