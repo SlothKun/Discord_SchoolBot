@@ -29,12 +29,6 @@ class Cog(commands.Cog):
         self.hmw_selection = ""
         self.correction_selec = ""
 
-    async def hmw_sorting(self, list):
-        newlist = []
-        for element in list:
-            print(element)
-            newlist.append(element)
-
     async def hmw_table_img_creation(self, subject):
         utcDate = datetime.datetime.utcnow()
         thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
@@ -104,7 +98,7 @@ class Cog(commands.Cog):
 
     async def msg_embed_creation(self, state, subject, hmw_list):
         try:
-            img_chan = self.bot.get_channel(708658324614283365)
+            img_chan = self.bot.get_channel(714242942226661428)
             subject_recv_chan = self.bot.get_channel(int(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id']))
             with open(f"Config/Hmw_tables/{subject}.png", 'rb') as table_img:
                 table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
@@ -118,7 +112,7 @@ class Cog(commands.Cog):
                 hmw_table = {
                     'subject': subject,
                     'recv_chan_id': self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'],
-                    'img_gathering_id': '708658324614283365',
+                    'img_gathering_id': '714242942226661428',
                     'embed_id': str(embed_msg.id),
                     'subject_hmw_list': hmw_name_list
                 }
@@ -196,16 +190,16 @@ class Cog(commands.Cog):
                         #print("counted : ", self.db.student_hmw.count_documents({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}}))
                         #print("hwm : ", self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[0]['publish_date']}})[0])
                         hmw_line = f"+         Devoir : {hmw_chosen.title()} "
-                        while len(hmw_line) != 41:
-                            if len(hmw_line) < 40:
+                        while len(hmw_line) != 61:
+                            if len(hmw_line) < 60:
                                 hmw_line += " "
-                            elif len(hmw_line) == 40:
+                            elif len(hmw_line) == 60:
                                 hmw_line += "+"
                         subject_line = f"+         Matière : {subject.title()} "
-                        while len(subject_line) != 41:
-                            if len(subject_line) < 40:
+                        while len(subject_line) != 61:
+                            if len(subject_line) < 60:
                                 subject_line += " "
-                            elif len(subject_line) == 40:
+                            elif len(subject_line) == 60:
                                 subject_line += "+"
 
                         await teacher.send("-------------------------------------------------------------------------------------")
@@ -341,7 +335,7 @@ class Cog(commands.Cog):
 +----------+----------+----------+----------+---------+
 |              Eleves hors TS1 (Spe ISN)              |
 +----------+----------+----------+----------+---------+
-|          |   Ambre  | MargauxO |   Mona   |         |
+| Lilian   |  Ambre   | MargauxO |   Mona   |         |
 +----------+----------+----------+----------+---------+```""")
 
 
@@ -474,7 +468,7 @@ class Cog(commands.Cog):
 
         # Verifie que le message est bien envoyé dans un channel correction
 
-        if len(list(self.db.send_recv_channels.find({'chan_recv_id':str(ctx.message.channel.id)}))) == 0:
+        if self.db.send_recv_channels.count_documents({'chan_recv_id':str(ctx.message.channel.id)}) == 0:
             await ctx.message.delete()
             errormsg = await ctx.channel.send("Cette commande n'est utilisable que dans les salons de reception, veuillez réessayer dans le salon correspondant à votre matière.")
             await asyncio.sleep(15)
@@ -615,7 +609,13 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         return
                     else:
                         sended_hmw = all_sended_hmw[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
-                        hmw = self.db.homework.find({'subject': sended_hmw['subject'], 'name':sended_hmw['hmw_name'], 'deadline':{'$gte': sended_hmw['sending_date']}})[0]
+                        print("sub : ", sended_hmw['subject'])
+                        print("name : ", sended_hmw['hmw_name'])
+                        print("sending date : ", sended_hmw['sending_date'])
+                        sended_date = sended_hmw['sending_date']
+                        formatted_sended_date = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+                        print("formated sended date : ", formatted_sended_date)
+                        hmw = self.db.homework.find({'subject': sended_hmw['subject'], 'name':sended_hmw['hmw_name'], 'deadline':{'$gte': formatted_sended_date}})[0]
                         print("hmw : ", hmw)
                         await CorrectionPrinting(added_msg, sended_hmw, hmw, subject)
 
@@ -640,7 +640,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
         msglist = []
         poll_info = {}
         all_propositions = []
-        poll_channel = self.bot.get_channel(696433108559331347)
+        poll_channel = self.bot.get_channel(691092710085492758)
         if len(kwargs) == 0:
             await ctx.send("Veuillez s'il vous plait préciser le nombre de proposition.")
         else:

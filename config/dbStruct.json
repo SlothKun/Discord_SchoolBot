@@ -4,7 +4,7 @@
     "db_port": 27017,
     "db_name": "schoolbot",
     "db_collections": {
-        "teacher": "professeur",
+        "teacher": "teachers",
         "teacher_fields":{
             "id":"_id",
             "name": "nom",
@@ -12,7 +12,7 @@
             "classes": "classes",
             "published_homework": "devoir"
         },
-        "student": "eleve",
+        "student": "students",
         "student_fields":{
             "id":"_id",
             "name": "nom",

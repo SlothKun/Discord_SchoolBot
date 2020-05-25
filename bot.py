@@ -3,7 +3,16 @@ from discord.ext import commands
 import os
 import json
 
-schoolBot = commands.Bot(command_prefix='$')
+schoolBot = commands.Bot(command_prefix='!')
+
+
+@schoolBot.event
+async def on_ready():
+    await schoolBot.change_presence(activity=discord.Game("J'envoi des devoirs, mais surtout de l'amour ❤"))
+    print('logged in as')
+    print(schoolBot.user.name)
+    print(schoolBot.user.id)
+    print('------')
 
 DELETE_TIME = 2
 

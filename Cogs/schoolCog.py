@@ -18,9 +18,9 @@ class SchoolBot(commands.Cog):
     MAX_WAITING_TIME = 120 #120seconds
     DELETE_TIME_WAIT = 5 #5 seconds
 
-    RECEIVE_CATEGORY_ID = "696433108899201155"
+    RECEIVE_CATEGORY_ID = "689149256174534722"
     RECEIVE_CATEGORY_NAME = "Espace profs"
-    HOMEWORK_DISPLAY_CHANNEL_ID = "696433108559331346"
+    HOMEWORK_DISPLAY_CHANNEL_ID = "689118532910579737"
 
     def __init__(self, schoolBot):
         super().__init__()
@@ -89,6 +89,7 @@ class SchoolBot(commands.Cog):
         for chan in chanDB.find({self.dbStruct['db_collections']['channel_fields']['categoryID']: SchoolBot.RECEIVE_CATEGORY_ID}):
             self.authorizedChan.append(chan[self.dbStruct['db_collections']['channel_fields']['channelID']])
         print("authorized : ", self.authorizedChan)
+
     ##########
     ##########
     ## LISTENERs

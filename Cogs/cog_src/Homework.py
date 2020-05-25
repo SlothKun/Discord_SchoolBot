@@ -35,7 +35,7 @@ class Homework():
     }
 
     WORD_SENSIBILITY = 0.4
-    NAME_MAX_LENGTH = 21
+    NAME_MAX_LENGTH = 41
 
     def __init__(self, creator, userAction, observerFunc, subjectList, suggSubject):
         self._creator = creator
