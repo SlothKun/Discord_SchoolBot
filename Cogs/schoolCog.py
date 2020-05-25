@@ -11,6 +11,7 @@ import json
 
 from .cog_src.HomeworkManager import HomeworkManager
 from .cog_src.Homework import Homework
+from .Cog import Cog
 
 class SchoolBot(commands.Cog):
     MAX_REACTION_TIME = 60 #60 seconds
@@ -30,7 +31,7 @@ class SchoolBot(commands.Cog):
 
         # Data about the mongo database used
         # Needs to have a predefined mongo database
-        with open("src/config/dbStruct.json", "r") as dbConfig:
+        with open("Config/dbStruct.json", "r") as dbConfig:
             self.dbStruct = json.load(dbConfig)
         # Connect and access to mongo database "schoolBot"
         self.mongoCli = MongoClient(self.dbStruct['db_address'], self.dbStruct['db_port'])
@@ -42,6 +43,7 @@ class SchoolBot(commands.Cog):
                 print(f"Cog {self.__class__.__name__} could not find the database")
         else:
             print(f"Cog {self.__class__.__name__} could not connect to MongoDB")
+
 
         # Homework manager
         # Will keep track of all homeworks currently attended
@@ -86,7 +88,7 @@ class SchoolBot(commands.Cog):
         self.authorizedChan = []
         for chan in chanDB.find({self.dbStruct['db_collections']['channel_fields']['categoryID']: SchoolBot.RECEIVE_CATEGORY_ID}):
             self.authorizedChan.append(chan[self.dbStruct['db_collections']['channel_fields']['channelID']])
-
+        print("authorized : ", self.authorizedChan)
     ##########
     ##########
     ## LISTENERs
@@ -190,7 +192,7 @@ class SchoolBot(commands.Cog):
 
                 elif str(reaction) == self.hmwConfEmojis["validHmwEmoji"]:
                     ######## Validate new homework and send it to the database
-                    (msgBack, emojis, chanID, hmwDocList) = self.hmwManager.validateHmwChange(user.id)
+                    (msgBack, emojis, chanID, hmwDocList), subject = self.hmwManager.validateHmwChange(user.id)
                     newMsg += msgBack
                     ######## Selecting the right text channel to send the homework documents
                     if chanID:
@@ -200,11 +202,14 @@ class SchoolBot(commands.Cog):
                             await channel.send(file = docFile)
                             await sleep(0.01)
                     await self.updateHmwChannel(reaction.message.channel.guild, None)
+                    SlothCog = Cog(self.schoolBot)
+                    await SlothCog.hmw_msg_verifier(subject)
                     hmwComplete = True
 
                 elif str(reaction) == self.hmwConfEmojis["nextElemsInDB"]:
                     ######## Display more available homeworks
-                    pass
+                    (msgBack, emojis) = self.hmwManager.refreshHmwList(user.id)
+                    newMsg += msgBack
 
                 elif str(reaction) in self.numberEmojis:
                     ######## User clicked on a reaction corresponding to a numberW

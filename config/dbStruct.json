@@ -2,7 +2,7 @@
     "__comment": "This config file is used for homogeneity purpose with the database parameters and fields",
     "db_address": "localhost",
     "db_port": 27017,
-    "db_name": "schoolBot",
+    "db_name": "schoolbot",
     "db_collections": {
         "teacher": "professeur",
         "teacher_fields":{
@@ -20,7 +20,7 @@
             "classe": "classe",
             "sent_homework": "devoir"
         },
-        "homework": "devoir",
+        "homework": "homework",
         "homework_fields": {
             "id": "_id",
             "name": "name",
@@ -28,9 +28,9 @@
             "deadline": "deadline",
             "creator": "creator",
             "subject": "subject",
-            "target": "cible",
+            "target": "class",
             "status": "status",
-            "chanID": "docChanID"
+            "chanID": "docChanName"
         },
         "correction":  "correction",
         "correction_fields": {
@@ -56,12 +56,12 @@
             "name": "name",
             "authorized": "botAlteration"
         },
-        "subject": "matiere",
+        "subject": "subject",
         "subject_fields": {
             "id": "_id",
             "subjectName": "subjectName"
         },
-        "channel": "salon",
+        "channel": "channel",
         "channel_fields": {
             "id": "_id",
             "channelID": "channelID",

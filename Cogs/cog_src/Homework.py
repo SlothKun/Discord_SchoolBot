@@ -87,7 +87,7 @@ class Homework():
         hmwDict['creator'] = {'name': self.id}
         hmwDict['subject'] = self.subject
         hmwDict['cible'] = 'TS1'
-        hmwDict['docChanID'] = self.dedicatedChanID
+        hmwDict['docChanName'] = self.dedicatedChanID
         hmwDict['status'] = self.status
         return hmwDict
 

@@ -16,7 +16,8 @@ class HomeworkMessage():
         "subjectChoice": Template("Veuillez sélectioner les réactions ci-dessous pour affiner votre choix:"),
         "subjectChoiceReac": Template("\n\tUtilisez la réaction $reac pour sélectionner la matiere '$subject'"),
 
-        "inDB": Template("Veuillez entrer un nouveau nom pour ce devoir afin d'éviter les conflits.\n\tAncien nom : $oldName")
+        "inDB": Template("Veuillez entrer un nouveau nom pour ce devoir afin d'éviter les conflits.\n\tAncien nom : $oldName"),
+        "hmwdisp": Template("\n\t\t* $emoji : $hmwname")
     }
 
     HMW_ADD = {

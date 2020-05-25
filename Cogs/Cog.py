@@ -21,7 +21,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'fr_FR.utf8')
 
 
-class Test(commands.Cog):
+class Cog(commands.Cog):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
@@ -30,19 +30,21 @@ class Test(commands.Cog):
         self.correction_selec = ""
 
     async def hmw_sorting(self, list):
-        print("lol")
-
+        newlist = []
+        for element in list:
+            print(element)
+            newlist.append(element)
 
     async def hmw_table_img_creation(self, subject):
         utcDate = datetime.datetime.utcnow()
         thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
-        all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
-        #all_hmw = list(self.db.devoir.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
+        #await self.hmw_sorting(list(self.db.homework.find({'subject': subject, 'deadline': {'$gte': thisDay}}).sort("deadline")))
+        all_hmw = list(self.db.homework.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
         #all_hmw = await self.homework_date_sorting(all_hmw)
 
         if len(all_hmw) == 0:
             return
-        all_std = list(self.db.eleve.find())
+        all_std = list(self.db.students.find())
 
         # Creation of the excel document
         workbook = xlsxwriter.Workbook(("Config/Hmw_tables/" + (subject +".xlsx")))
@@ -80,21 +82,17 @@ class Test(commands.Cog):
             worksheet.write(row, col, std['name'].title(), std_format)
             for hmw in all_hmw:
                 col+=1
-                if len(list(self.db.student_hmw.find({'student_id':std["student_id"], 'hmw_name': hmw['name']}))) == 0:
-                    print("status trouvé : Non rendu")
+                if len(list(self.db.student_hmw.find({'student_id':std["student_id"], 'hmw_name': hmw['name'], 'sending_date': {'$gte': hmw['publish_date']}}))) == 0:
                     worksheet.write(row, col, "Non rendu", not_sended_format)
-                elif len(list(self.db.student_hmw.find({'hmw_status':"Envoyé", 'student_id':std["student_id"], 'hmw_name': hmw['name']}))) > 0:
-                    print("status trouvé : Envoyé")
-                    deadline = str(self.db.student_hmw.find({'hmw_name': hmw['name'], 'student_id':std["student_id"]})[0]['sending_date'])
+                elif len(list(self.db.student_hmw.find({'hmw_status':"Envoyé", 'student_id':std["student_id"], 'hmw_name': hmw['name'], 'sending_date': {'$gte': hmw['publish_date']}}))) > 0:
+                    deadline = str(self.db.student_hmw.find({'hmw_name': hmw['name'], 'student_id':std["student_id"], 'sending_date': {'$gte': hmw['publish_date']}})[0]['sending_date'])
                     date = deadline.split()[0]
                     formatted_date = f"{date[len(date) -2:]}/{date[-5:-3]}"
                     hour = deadline.split()[1].split(".")[0][:-3]
                     worksheet.write(row, col, (f"le {formatted_date} à {hour}"), sended_format)
-                elif len(list(self.db.student_hmw.find({'hmw_status':"Reçu", 'student_id':std["student_id"], 'hmw_name': hmw['name']}))) > 0:
-                    print("status trouvé : Reçu")
+                elif len(list(self.db.student_hmw.find({'hmw_status':"Reçu", 'student_id':std["student_id"], 'hmw_name': hmw['name'], 'sending_date': {'$gte': hmw['publish_date']}}))) > 0:
                     worksheet.write(row, col, "Reçu", received_format)
-                elif len(list(self.db.student_hmw.find({'hmw_status':"Corrigé", 'student_id':std["student_id"], 'hmw_name': hmw['name']}))) > 0:
-                    print("status trouvé : Corrigé")
+                elif len(list(self.db.student_hmw.find({'hmw_status':"Corrigé", 'student_id':std["student_id"], 'hmw_name': hmw['name'], 'sending_date': {'$gte': hmw['publish_date']}}))) > 0:
                     worksheet.write(row, col, "Corrigé", corrected_format)
 
         #for each_row in range(0, row):
@@ -107,7 +105,7 @@ class Test(commands.Cog):
     async def msg_embed_creation(self, state, subject, hmw_list):
         try:
             img_chan = self.bot.get_channel(708658324614283365)
-            subject_recv_chan = self.bot.get_channel(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'])
+            subject_recv_chan = self.bot.get_channel(int(self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id']))
             with open(f"Config/Hmw_tables/{subject}.png", 'rb') as table_img:
                 table_img_msg = await img_chan.send(file=discord.File(fp=table_img, filename=f'{subject}.png'))
             embed = discord.Embed()
@@ -120,8 +118,8 @@ class Test(commands.Cog):
                 hmw_table = {
                     'subject': subject,
                     'recv_chan_id': self.db.send_recv_channels.find({'subject': subject})[0]['chan_recv_id'],
-                    'img_gathering_id': 708658324614283365,
-                    'embed_id': embed_msg.id,
+                    'img_gathering_id': '708658324614283365',
+                    'embed_id': str(embed_msg.id),
                     'subject_hmw_list': hmw_name_list
                 }
                 self.db.hmw_table.insert_one(hmw_table)
@@ -141,7 +139,7 @@ class Test(commands.Cog):
 
     async def hmw_msg_verifier(self, subject, *infos):
         start = time.time()
-        if len(list(self.db.hmw_table.find({"subject":subject}))) != 0:
+        if self.db.hmw_table.count_documents({"subject":subject}) != 0:
             ##if len(list(self.db.student_hmw.find({"student_id":list(infos)[0], "hmw_name":list(infos)[1]}))) == 1:
             all_hmw = await self.hmw_table_img_creation(subject)
             await self.msg_embed_creation('update', subject, all_hmw)
@@ -174,13 +172,13 @@ class Test(commands.Cog):
                 - add verif no bot answer
             '''
 
-            if len(list(self.db.hmw_table.find({'recv_chan_id': reaction.channel_id}))) == 1 and len(list(self.db.hmw_table.find({'embed_id': reaction.message_id}))) == 1:
+            if len(list(self.db.hmw_table.find({'recv_chan_id': str(reaction.channel_id)}))) == 1 and len(list(self.db.hmw_table.find({'embed_id': str(reaction.message_id)}))) == 1:
                 recv_channel = self.bot.get_channel(reaction.channel_id)
                 embeded_msg = await recv_channel.fetch_message(reaction.message_id)
-                hmw_name_list = self.db.hmw_table.find({'recv_chan_id': reaction.channel_id})[0]['subject_hmw_list']
+                hmw_name_list = self.db.hmw_table.find({'recv_chan_id': str(reaction.channel_id)})[0]['subject_hmw_list']
                 is_reaction_good = False
                 for emoji_in_embed in embeded_msg.reactions:
-                    if len(list(self.db.professeur.find({'id': reaction.user_id}))) >= 1 and emoji_in_embed.count >= 2:
+                    if len(list(self.db.teachers.find({'id': str(reaction.user_id)}))) >= 1 and emoji_in_embed.count >= 2:
                         is_reaction_good = True
                         print(emoji_in_embed)
 
@@ -190,13 +188,13 @@ class Test(commands.Cog):
                         hmw_chosen = hmw_name_list[int(self.db.emoji.find({'value': reaction.emoji.name})[0]["name"]) - 1]
                         all_std_hmw = []
                         teacher = self.bot.get_user(reaction.user_id)
-                        print(hmw_chosen)
-                        subject = self.db.send_recv_channels.find({'chan_recv_id': reaction.channel_id})[0]['subject']
+                        print("hmw name : ", hmw_chosen)
+                        subject = self.db.send_recv_channels.find({'chan_recv_id': str(reaction.channel_id)})[0]['subject']
                         utcDate = datetime.datetime.utcnow()
                         thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
-                        dvr = self.db.devoir.find({'subject': subject, 'name': hmw_chosen}).sort('publish_date')
-                        print("counted : ", self.db.student_hmw.count_documents({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}}))
-                        print("hwm : ", self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}})[0])
+                        hmw = self.db.homework.find({'subject': subject, 'name': hmw_chosen, 'deadline':{'$gte':thisDay}})[0]
+                        #print("counted : ", self.db.student_hmw.count_documents({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[1]['publish_date']}}))
+                        #print("hwm : ", self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date': {'$gte':dvr[0]['publish_date']}})[0])
                         hmw_line = f"+         Devoir : {hmw_chosen.title()} "
                         while len(hmw_line) != 41:
                             if len(hmw_line) < 40:
@@ -217,43 +215,45 @@ class Test(commands.Cog):
 {hmw_line}
 {subject_line}
 +---------------------------------------+```""")
-                        for std_hmw in self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen}):
-                            await teacher.send(f"""```ini
-                  [ Élève : {std_hmw['name']} ]```""")
-                            message = ""
-                            for nb in range(0, len(std_hmw['message'])):
-                                if std_hmw['message'][nb] != "" and std_hmw['hmw_status'][nb] == "Envoyé":
-                                    message += std_hmw['message'][nb] + "\n"
+                        for std_hmw in self.db.student_hmw.find({'subject': subject, 'hmw_name': hmw_chosen, 'sending_date':{'$gte': hmw['publish_date']}}):
+                            if 'Envoyé' in std_hmw['hmw_status']:
+                                await teacher.send(f"""```ini
+            [ Élève : {std_hmw['name']} ]```""")
+                                message = ""
+                                for nb in range(0, len(std_hmw['message'])):
+                                    if std_hmw['message'][nb] != "" and std_hmw['hmw_status'][nb] == "Envoyé":
+                                        message += std_hmw['message'][nb] + "\n"
 
-                            all_file = []
-                            file_number = 0
-                            general_number = 0
-                            status_list = []
-                            for file in std_hmw['file']:
-                                if std_hmw['hmw_status'][general_number] == "Envoyé":
-                                    status_list.append('Reçu')
-                                    if file != '':
-                                        index = std_hmw['file'].index(file)
-                                        extension = std_hmw['filename'][index].split('.')[1]
-                                        filename = f"{std_hmw['name'].title()}_{std_hmw['hmw_name'].title()}_Part{file_number}.{extension}"
-                                        all_file.append(discord.File(fp=io.BytesIO(file), filename=filename))
-                                        file_number += 1
-                                elif std_hmw['hmw_status'][general_number] == "Reçu":
-                                    status_list.append('Reçu')
-                                elif std_hmw['hmw_status'][general_number] == "Corrigé":
-                                    status_list.append('Corrigé')
-                                general_number += 1
+                                all_file = []
+                                file_number = 0
+                                general_number = 0
+                                status_list = []
+                                for file in std_hmw['file']:
+                                    if std_hmw['hmw_status'][general_number] == "Envoyé":
+                                        status_list.append('Reçu')
+                                        if file != '':
+                                            index = std_hmw['file'].index(file)
+                                            extension = std_hmw['filename'][index].split('.')[1]
+                                            filename = f"{std_hmw['name'].title()}_{std_hmw['hmw_name'].title()}_Part{file_number}.{extension}"
+                                            all_file.append(discord.File(fp=io.BytesIO(file), filename=filename))
+                                            file_number += 1
+                                    elif std_hmw['hmw_status'][general_number] == "Reçu":
+                                        status_list.append('Reçu')
+                                    elif std_hmw['hmw_status'][general_number] == "Corrigé":
+                                        status_list.append('Corrigé')
+                                    general_number += 1
 
-                            await teacher.send(content=f"***__Message__ :*** {message}", files=all_file)
-                            self.db.student_hmw.find_and_modify(
-                                query={'subject': subject,
-                                       'name': std_hmw['name'],
-                                       'hmw_name': hmw_chosen
-                                       },
-                                update={'$set':
-                                            {'hmw_status': status_list}
-                                        }
-                            )
+                                await teacher.send(content=f"***__Message__ :*** {message}", files=all_file)
+                                self.db.student_hmw.find_and_modify(
+                                    query={'subject': subject,
+                                           'name': std_hmw['name'],
+                                           'hmw_name': hmw_chosen,
+                                           'sending_date': {'$gte': hmw['publish_date']}
+                                           },
+                                    update={'$set':
+                                                {'hmw_status': status_list}
+                                            }
+                                )
                         await teacher.send(f"""```diff
 +---------------------------------------+
 -         Fin de la reception           -
@@ -296,9 +296,13 @@ class Test(commands.Cog):
     async def hmwinrange(self, ctx, subject):
         utcDate = datetime.datetime.utcnow()
         thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
-        hmws = self.db.devoir.find({'subject':subject, 'deadline': {'$gte':thisDay}}).sort('deadline')
-        nbRes = self.db.devoir.count_documents({'subject':'math', 'deadline': {'$gte':thisDay}})
+        print(thisDay)
+        hmws = self.db.homework.find({'subject':subject, 'deadline': {'$gte':thisDay}}).sort('deadline')
+        nbRes = self.db.homework.count_documents({'subject':subject, 'deadline': {'$gte':thisDay}})
         for hmw in hmws:
+            print("------")
+            print(hmw['name'])
+            print(hmw['status'])
             print(hmw['deadline'])
         print(nbRes)
 
@@ -369,13 +373,13 @@ class Test(commands.Cog):
 
 
 
-    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.has_any_role(696433108253409371, 696433108253409373, 689074976023773224, 689075325124083746)
     @commands.command()
     async def sensicheck(self, ctx, name):
         if ctx.message.author == self.bot.user:
             return
         std_list = []
-        all_std = self.db.eleve.find()
+        all_std = self.db.students.find()
         print(all_std)
         for std in all_std:
             std_list.append(std['name'])
@@ -396,18 +400,18 @@ class Test(commands.Cog):
 
 
 
-    @commands.has_any_role(696433108253409371, 696433108253409373)
+    @commands.has_any_role(696433108253409371, 696433108253409373, 689074976023773224, 689075325124083746)
     @commands.command(aliases=['corection','corrections','correctif','corections','corecttion','corecttions','corriger'])
     async def correction(self, ctx, *complement):
-        async def CorrectionPrinting(added_msg, hmw, subject):
+        async def CorrectionPrinting(added_msg, sended_hmw, hmw, subject):
             if len(complement) > 1:
                 for i in range(1, len(complement)):
                     added_msg += complement[i] + " "
             async with ctx.message.channel.typing():
-                if hmw == "":
+                if sended_hmw == "":
                     hmw_line = ""
                 else:
-                    hmw_line = f"+         Devoir : {hmw['hmw_name'].title()} "
+                    hmw_line = f"+         Devoir : {sended_hmw['hmw_name'].title()} "
                     while len(hmw_line) != 41:
                         if len(hmw_line) < 40:
                             hmw_line += " "
@@ -420,8 +424,7 @@ class Test(commands.Cog):
                         subject_line += " "
                     elif len(subject_line) == 40:
                         subject_line += "+"
-
-                teacher = f"+         Professeur : {self.db.professeur.find({'id': ctx.message.author.id})[0]['name'].title()} "
+                teacher = f"+         Professeur : {self.db.teachers.find({'id': str(ctx.message.author.id)})[0]['name'].title()} "
                 while len(teacher) != 41:
                     if len(teacher) < 40:
                         teacher += " "
@@ -449,37 +452,29 @@ class Test(commands.Cog):
 +---------------------------------------+
 -         Fin de la reception           -
 +---------------------------------------+```""")
-                status_list = []
-                print("all status : ", hmw['hmw_status'])
-                for status in hmw['hmw_status']:
-                    print(status)
-                    if status == "Reçu":
-                        status_list.append("Corrigé")
-                    elif status == "Corrigé":
-                        status_list.append("Corrigé")
-                    elif status == "Envoyé":
-                        status_list.append("Envoyé")
+                if sended_hmw != "":
+                    status_list = []
+                    print("all status : ", sended_hmw['hmw_status'])
+                    for status in sended_hmw['hmw_status']:
+                        print(status)
+                        if status == "Reçu":
+                            status_list.append("Corrigé")
+                        elif status == "Corrigé":
+                            status_list.append("Corrigé")
+                        elif status == "Envoyé":
+                            status_list.append("Envoyé")
 
-                print("status list : ", status_list)
-                """
-                for nb in range(0, len(student_sended_hmw['hmw_status'])):
-                    if student_sended_hmw['hmw_status'][nb] == "Reçu":
-                        status_list.append("Corrigé")
-                    elif student_sended_hmw['hmw_status'][nb] == "Corrigé":
-                        status_list.append("Corrigé")
-                    elif student_sended_hmw['hmw_status'][nb] == "Envoyé":
-                        status_list.append("Envoyé")
-                """
-
-                self.db.student_hmw.find_and_modify(query={"student_id": str(student.id), 'hmw_name': hmw['hmw_name']},
+                    print("status list : ", status_list)
+                    self.db.student_hmw.find_and_modify(query={"student_id": str(student.id), 'hmw_name': hmw['name'], 'sending_date':{'$gte':hmw['publish_date']}},
                                                     update={"$set": {'hmw_status': status_list}})
-                await self.hmw_msg_verifier(subject)
+                    await self.hmw_msg_verifier(subject)
                 correction_selec = await ctx.send(content=f"<@{ctx.message.author.id}>, le message a bien été envoyé à {name}")
             await asyncio.sleep(15)
             await correction_selec.delete()
 
         # Verifie que le message est bien envoyé dans un channel correction
-        if len(list(self.db.send_recv_channels.find({'chan_recv_id':ctx.message.channel.id}))) == 0:
+
+        if len(list(self.db.send_recv_channels.find({'chan_recv_id':str(ctx.message.channel.id)}))) == 0:
             await ctx.message.delete()
             errormsg = await ctx.channel.send("Cette commande n'est utilisable que dans les salons de reception, veuillez réessayer dans le salon correspondant à votre matière.")
             await asyncio.sleep(15)
@@ -488,12 +483,14 @@ class Test(commands.Cog):
 
         # Verify that there's a name in the message
         if len(complement) == 0:
+            await ctx.message.delete()
             errormsg = await ctx.send("Veuillez recommencer en respectant le format suivant : '!correction nom_de_leleve' avec votre fichier attaché à votre message")
             await asyncio.sleep(15)
             await errormsg.delete()
         else:
             try:
-                subject = self.db.professeur.find({'id': ctx.message.author.id})[0]['subject']
+
+                subject = self.db.teachers.find({'id': str(ctx.message.author.id)})[0]['subject']
                 url = ctx.message.attachments[0].url
                 filename = ctx.message.attachments[0].filename
                 async with aiohttp.ClientSession() as session:
@@ -502,7 +499,7 @@ class Test(commands.Cog):
                         file = await resp.read()
                 name = list(complement)[0].lower()
                 std_list = []
-                all_std = self.db.eleve.find()
+                all_std = self.db.students.find()
                 for std in all_std:
                     std_list.append(std['name'])
                 # Search Student
@@ -527,8 +524,9 @@ class Test(commands.Cog):
                                 await correction_selec.delete()
                                 return
                             elif self.db.emoji.find({'value': str(reaction)})[0]["name"] in ["0","1","2","3","4","5","6","7","8","9"]:
-                                student_obj = self.db.eleve.find({'name': possibility[int(self.db.emoji.find({'value': str(reaction)})[0]["name"])-1]})[0]
+                                student_obj = self.db.students.find({'name': possibility[int(self.db.emoji.find({'value': str(reaction)})[0]["name"])-1]})[0]
                                 print(f"eleve choisi : {student_obj['name']}")
+                                name = student_obj['name']
                             else:
                                 correction_selec = await ctx.channel.send("Annulation de la commande..")
                                 await asyncio.sleep(10)
@@ -547,23 +545,22 @@ class Test(commands.Cog):
                         return
                 else:
                     print(f"{name} existe dans la BDD")
-                    student_obj = self.db.eleve.find({'name': name})[0]
+                    student_obj = self.db.students.find({'name': name})[0]
 
                 student = self.bot.get_user(int(student_obj['student_id']))
                 print("student : ", student)
                 print("student id : ", student.id)
                 added_msg = ""
-                subject = self.db.send_recv_channels.find({'chan_recv_id': ctx.message.channel.id})[0]['subject']
+                subject = self.db.send_recv_channels.find({'chan_recv_id': str(ctx.message.channel.id)})[0]['subject']
                 # Demander devoir
-                student_sended_hmw = self.db.student_hmw.find({"student_id":str(student.id), 'subject': subject})
-
-                print("std_sended_hmw : ", student_sended_hmw)
-                print("Counted : ", self.db.student_hmw.count_documents({'student_id': str(student.id), 'subject': subject}))
-
+                utcDate = datetime.datetime.utcnow()
+                thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
                 all_sended_hmw = []
-                for hmw in self.db.student_hmw.find({'student_id': str(student.id), 'subject': subject}).sort("sending_date"):
-                    if "Reçu" in hmw['hmw_status']:
-                        all_sended_hmw.append(hmw)
+                print("counted :", self.db.homework.count_documents({'subject': subject, 'deadline': {'$gte': thisDay}}))
+                for hmw in self.db.homework.find({'subject': subject, 'deadline': {'$gte': thisDay}}):
+                    if self.db.student_hmw.count_documents({"student_id":str(student.id), 'hmw_name':hmw["name"],'subject': subject, 'sending_date': {'$gte': hmw['publish_date']}}) == 1:
+                        if "Reçu" in self.db.student_hmw.find({"student_id":str(student.id), 'hmw_name':hmw["name"],'subject': subject, 'sending_date': {'$gte': hmw['publish_date']}})[0]['hmw_status']:
+                            all_sended_hmw.append(self.db.student_hmw.find({"student_id":str(student.id), 'hmw_name':hmw["name"],'subject': subject, 'sending_date': {'$gte': hmw['publish_date']}})[0])
 
                 print("len sended hmw : ", len(all_sended_hmw))
 
@@ -577,8 +574,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=lambda reaction, user: user == ctx.message.author and reaction.message.id == correction_selec.id)
                     await correction_selec.delete()
                     if self.db.emoji.find({'value': str(reaction)})[0]["name"] == "1":
-                        async with ctx.message.channel.typing():
-                            await CorrectionPrinting(added_msg, "", subject)
+                            await CorrectionPrinting(added_msg, "", "", subject)
                     else:
                         correction_selec = await ctx.channel.send("Annulation de la commande..")
                         await asyncio.sleep(10)
@@ -588,7 +584,6 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     which_hmw = "```A quel devoir appartient cette correction ?\n"
                     print("all_hmw : ", all_sended_hmw)
                     print("len all_hmw :", len(all_sended_hmw))
-
 
                     for nb in range(0, len(all_sended_hmw)):
                         print("homework : ", all_sended_hmw[nb]['hmw_name'])
@@ -619,9 +614,10 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         await correction_selec.delete()
                         return
                     else:
-                        hmw = all_sended_hmw[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
+                        sended_hmw = all_sended_hmw[int(self.db.emoji.find({'value':str(reaction)})[0]['name'])-1]
+                        hmw = self.db.homework.find({'subject': sended_hmw['subject'], 'name':sended_hmw['hmw_name'], 'deadline':{'$gte': sended_hmw['sending_date']}})[0]
                         print("hmw : ", hmw)
-                        await CorrectionPrinting(added_msg, hmw, subject)
+                        await CorrectionPrinting(added_msg, sended_hmw, hmw, subject)
 
             except Exception as e:
                 if str(e) == "list index out of range":
@@ -659,7 +655,8 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     user_msg = await self.bot.wait_for('message', timeout=60)
                     while str(user_msg.author) != str(ctx.author) or str(user_msg.channel) != str(ctx.channel):
                         user_msg = await self.bot.wait_for('message', timeout=60)
-                    complete_string = f"<@&696433108244889722> - Sondage proposé par {self.db.eleve.find({'student_id':ctx.message.author.id})[0]['name'].title()} :```\n{user_msg.content} \n"
+
+                    complete_string = f"<@&696433108244889722> - Sondage proposé par {self.db.students.find({'student_id':str(ctx.message.author.id)})[0]['name'].title()} :```\n{user_msg.content} \n"
                     poll_info['description'] = user_msg.content
                     msglist.append(user_msg)
                     for i in range(0, nb_proposition):
@@ -677,7 +674,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     poll_info['propositions'] = all_propositions
                     poll_info['published_time'] = datetime.datetime.now()
                     poll_info['deadline'] = datetime.datetime.now() + datetime.timedelta(hours=3)
-                    self.db.sondage.insert_one(poll_info)
+                    self.db.poll.insert_one(poll_info)
                     for i in range(0, nb_proposition):
                         await bot_msg.add_reaction(self.db.emoji.find({'name':str(i)})[0]['value'])
                     for i in range(0, len(msglist)):
@@ -715,16 +712,15 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 if page_nb > 1:
                     hmw_selection += f"\n{self.db.emoji.find({'name': 'back'})[0]['value']} : Revenir à la page précédente"
                 if printed_elements < len(all_hmw):
-                    hmw_selection += f"\n{self.db.emoji.find({'name': 'forward'})[0]['value']} : Aller à la page suivante"
+                    hmw_selection += f"\n{self.db.emoji.find({'name': 'nextElem'})[0]['value']} : Aller à la page suivante"
                 hmw_selection = await message.channel.send(hmw_selection + "```")
-
 
                 if page_nb > 1:
                     await hmw_selection.add_reaction(self.db.emoji.find({'name': 'back'})[0]['value'])
                 for nb in range(1, printed_elements+1):
                     await hmw_selection.add_reaction(self.db.emoji.find({'name': str(nb)})[0]['value'])
                 if printed_elements < len(all_hmw):
-                    await hmw_selection.add_reaction(self.db.emoji.find({'name': 'forward'})[0]['value'])
+                    await hmw_selection.add_reaction(self.db.emoji.find({'name': 'nextElem'})[0]['value'])
 
                 try:
                     print("before waiting react : ", hmw_selection)
@@ -736,7 +732,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
 
                 reaction = self.db.emoji.find({'value': str(reaction)})[0]['name']
                 await hmw_selection.delete()
-                if reaction == self.db.emoji.find({'name': 'forward'})[0]['name']:
+                if reaction == self.db.emoji.find({'name': 'nextElem'})[0]['name']:
                     hmw_list, reaction = await homework_printing(page_nb+1, stop, stop+5, all_hmw)
                 elif reaction == self.db.emoji.find({'name': 'back'})[0]['name']:
                     hmw_list, reaction = await homework_printing(page_nb-1, start-5, start, all_hmw)
@@ -744,7 +740,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
 
         try:
 
-            channel_obj = self.db.send_recv_channels.find({'chan_send_id': message.channel.id})[0]
+            channel_obj = self.db.send_recv_channels.find({'chan_send_id': str(message.channel.id)})[0]
             async with message.channel.typing():
                 prof = self.bot.get_user(int(channel_obj['teacher_id']))
                 recv_chan = self.bot.get_channel(int(channel_obj['chan_recv_id']))
@@ -782,13 +778,14 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
             try:
                 utcDate = datetime.datetime.utcnow()
                 thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
-                all_hmw = list(self.db.devoir.find({'subject': channel_obj['subject'], 'deadline': {'$gte': thisDay}}).sort("deadline"))
-                if len(all_hmw) == 0:
+                all_hmw = list(self.db.homework.find({'subject': channel_obj['subject'], 'deadline': {'$gte': thisDay}}).sort("deadline"))
+                all_hmw_count = self.db.homework.count_documents({'subject': channel_obj['subject'], 'deadline': {'$gte': thisDay}})
+                print("all hmw in range : ", all_hmw_count)
+                if all_hmw_count == 0:
                     errormsg = await message.channel.send("```Aucun devoir pour cette matière```")
                     await asyncio.sleep(15)
                     await errormsg.delete()
                     return
-
                 hmw_list, reaction_nb = await homework_printing(1, 0, 5, all_hmw)
             except Exception as e:
                 if str(e) == "no such item for Cursor instance":
@@ -808,19 +805,25 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                         print("Error homework finding/sorting : ", str(e))
                         return
             print("id", message.author.id)
-            print("eleve bdd", self.db.eleve.find({'student_id':str(message.author.id)})[0])
-            std_name = self.db.eleve.find({'student_id':str(message.author.id)})[0]['name']
-            is_hmw_in_bdd = list(self.db.student_hmw.find({'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1]}))
+            print("eleve bdd", self.db.students.find({'student_id':str(message.author.id)})[0])
+            std_name = self.db.students.find({'student_id':str(message.author.id)})[0]['name']
+            print("hmw : ", hmw_list[int(reaction_nb)-1])
+            utcDate = datetime.datetime.utcnow()
+            thisDay = datetime.datetime(utcDate.year, utcDate.month, utcDate.day)
+            hmw = self.db.homework.find({'subject':hmw_list[int(reaction_nb)-1][0], 'name':hmw_list[int(reaction_nb)-1][1], 'deadline':{'$gte':thisDay}})[0]
+            print(hmw)
+            #is_hmw_in_bdd = list(self.db.student_hmw.find({'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1], 'sending_date':{'$gte':hmw['publish_date']}}))
             messages = [message.content]
             status = ["Envoyé"]
-            print("is in bdd : ", is_hmw_in_bdd)
+            #print("is in bdd : ", is_hmw_in_bdd)
             print("hmw name : ", hmw_list[int(reaction_nb)-1][1])
+            counted = self.db.student_hmw.count_documents({'name': std_name, 'hmw_name': hmw_list[int(reaction_nb) - 1][1],
+                                                 'sending_date': {'$gte': hmw['publish_date']}})
+            print("counted :", counted)
 
             async with message.channel.typing():
-
                 # Create the element
-                if len(is_hmw_in_bdd) == 0:
-
+                if self.db.student_hmw.count_documents({'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1], 'sending_date':{'$gte':hmw['publish_date']}}) == 0:
                     if len(filename_list) == 0:
                         filename_list.append("")
                         file_list.append("")
@@ -842,7 +845,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     self.db.student_hmw.insert_one(student_hmw)
                 # Update the element
                 else:
-                    student_hmw = is_hmw_in_bdd[0]
+                    student_hmw = self.db.student_hmw.find({'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1], 'sending_date':{'$gte':hmw['publish_date']}})[0]
                     student_hmw['message'].append(message.content)
                     student_hmw['hmw_status'].append("Envoyé")
                     if len(filename_list) == 0:
@@ -862,7 +865,7 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                     print("std_msg : ", student_hmw['message'])
                     #print("std_hmw : ", student_hmw)
                     print("-----")
-                    self.db.student_hmw.find_and_modify(query={'subject': hmw_list[int(reaction_nb)-1][0], 'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1]}, update={'$set': {'message': student_hmw['message'], 'filename':student_hmw['filename'], 'file':student_hmw['file'], 'sending_date':datetime.datetime.now(), 'hmw_status':student_hmw['hmw_status']}})
+                    self.db.student_hmw.find_and_modify(query={'subject': hmw_list[int(reaction_nb)-1][0], 'name':std_name, 'hmw_name':hmw_list[int(reaction_nb)-1][1], 'sending_date':{'$gte':hmw['publish_date']}}, update={'$set': {'message': student_hmw['message'], 'filename':student_hmw['filename'], 'file':student_hmw['file'], 'sending_date':datetime.datetime.now(), 'hmw_status':student_hmw['hmw_status']}})
 
                 ### IMPORTANT : sur la ligne commentée suivante, on voit comment il faut envoyer le fichier !
                 ### METTRE EN PLACE ENVOI DE FICHIER
@@ -893,4 +896,4 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
             await message.channel.send("Mes plus sincères excuses maitre, je ne recommencerai plus")
 
 def setup(bot):
-    bot.add_cog(Test(bot))
+    bot.add_cog(Cog(bot))

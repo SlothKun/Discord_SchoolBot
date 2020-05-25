@@ -3,7 +3,7 @@ from discord.ext import commands
 import os
 import json
 
-schoolBot = commands.Bot(command_prefix='!')
+schoolBot = commands.Bot(command_prefix='$')
 
 DELETE_TIME = 2
 
@@ -12,9 +12,8 @@ DELETE_TIME = 2
 async def load(ctx, extension):
     """Commande '!load [nom_extension]' : permet d'ajouter une extension"""
     try:
-        schoolBot.load_extension(f'cogs.{extension}')
+        schoolBot.load_extension(f'Cogs.{extension}')
         print(f"Loaded extension {extension}")
-        print(e)
     except commands.ExtensionNotFound as e:
         print(f"Extension {extension} is not found")
         print(e)
@@ -31,9 +30,8 @@ async def load(ctx, extension):
 async def unload(ctx, extension):
     """Commande '!unload [nom_extension]' : permet de retirer une extension"""
     try:
-        schoolBot.unload_extension(f'cogs.{extension}')
+        schoolBot.unload_extension(f'Cogs.{extension}')
         print(f"Unloaded extension {extension}")
-        print(e)
     except commands.ExtensionNotLoaded as e:
         print(f"Extension {extension} is not loaded")
         print(e)
@@ -43,13 +41,13 @@ async def unload(ctx, extension):
 async def reload(ctx, extension):
     """Commande '!reload [nom_extension]' : permet de recharger une extension"""
     try:
-        schoolBot.reload_extension(f'cogs.{extension}')
+        schoolBot.reload_extension(f'Cogs.{extension}')
         print(f"Reloaded extension {extension}")
     except commands.ExtensionNotLoaded as e:
         print(f"Extension {extension} is not loaded")
         print(e)
         try:
-            schoolBot.load_extension(f'cogs.{extension}')
+            schoolBot.load_extension(f'Cogs.{extension}')
         except commands.ExtensionNotFound as e:
             print(f"Extension {extension} is not found")
             print(e)
@@ -83,10 +81,10 @@ async def q(ctx):
     await ctx.message.delete()
 
 # Automatic load at start of all COGs listed in folder './cogs'
-for filename in os.listdir("src/cogs"):
+for filename in os.listdir("Cogs/"):
     if filename.endswith('.py'):
         try:
-            schoolBot.load_extension(f'cogs.{filename[:-3]}')
+            schoolBot.load_extension(f'Cogs.{filename[:-3]}')
             print(f"Loaded extension {filename[:-3]}")
         except commands.ExtensionNotFound as e:
             print(f"Extension {filename[:-3]} is not found")
@@ -100,5 +98,5 @@ for filename in os.listdir("src/cogs"):
 
 # print(", ".join(schoolBot.cogs.keys()))
 
-with open("src/config/bot_token.json") as tokenFile:
+with open("Config/Bot_Token.json") as tokenFile:
     schoolBot.run(json.load(tokenFile)['TOKEN'])

@@ -25,7 +25,8 @@ class HomeworkManager():
             'date': dbStructJson['db_collections']['homework_fields']['deadline'],
             'subject': dbStructJson['db_collections']['homework_fields']['subject'],
             'name': dbStructJson['db_collections']['homework_fields']['name'],
-            'chanID': dbStructJson['db_collections']['homework_fields']['chanID']
+            'chanID': dbStructJson['db_collections']['homework_fields']['chanID'],
+            'status': dbStructJson['db_collections']['homework_fields']['status']
         }
 
         # Channel collection elements
@@ -51,7 +52,9 @@ class HomeworkManager():
             'name': dbStructJson['db_collections']['emoji_fields']['name'],
             'value': dbStructJson['db_collections']['emoji_fields']['value']
         }
+
         self.emojiNumber = [self.hmwEmojiCol.find_one({self.emojiFields['name']: str(a)}, {self.emojiFields['id']: 0, self.emojiFields['value']:1})[self.emojiFields['value']] for a in range(0,10)]
+
         self.emojiList = {
             HomeworkManager.HMW_EMOJIS[0] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'back'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']],
             HomeworkManager.HMW_EMOJIS[1] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'cross'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']],
@@ -62,7 +65,7 @@ class HomeworkManager():
             HomeworkManager.HMW_ACTIONS[1] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'edit'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']],
             HomeworkManager.HMW_ACTIONS[2] : self.hmwEmojiCol.find_one({self.emojiFields['name']: 'delete'}, {self.emojiFields['id']: 0, self.emojiFields['value']: 1})[self.emojiFields['value']]
         }
-    
+
     def __str__(self):
         res =  f"HomeworkManager currently keep track of {len(self.homeworks)} homework(s):"
         for hmw in self.homeworks:
@@ -218,9 +221,9 @@ class HomeworkManager():
                 formatedHmwList += f"\n\t* {subject} :"
                 for homework in groupedHmw[hmwDate][subject]:
                     if homework[self.hmwFields['chanID']]:
-                        formatedHmwList += f"\n\t\t * {homework[self.hmwFields['name']]} ({homework[self.hmwFields['chanID']]})"
+                        formatedHmwList += f"\n\t\t * ({homework[self.hmwFields['status']]}) {homework[self.hmwFields['name']]} ({homework[self.hmwFields['chanID']]})"
                     else:
-                        formatedHmwList += f"\n\t\t * {homework[self.hmwFields['name']]}"
+                        formatedHmwList += f"\n\t\t * ({homework[self.hmwFields['status']]}) {homework[self.hmwFields['name']]}"
             formatedHmwList += "\n"
 
         if botAlteringUser:
@@ -255,7 +258,8 @@ class HomeworkManager():
                 for hmw in datedHmw[hmwDate]:
                     if (counter < (minIdx + 10)):
                         emoji = self.emojiNumber[(counter - minIdx)]
-                        formatedHmwList += f"\n\t\t* {hmw[self.hmwFields['name']]} --> {emoji}"
+                        formatedHmwList += HomeworkMessage.HMW_UTILS['hmwdisp'].substitute(emoji=emoji, hmwname=hmw[self.hmwFields['name']])
+                        #formatedHmwList += f"\n\t\t* {emoji} : {hmw[self.hmwFields['name']]}"
                         emojis.append(emoji)
                         counter += 1
                         self.numberedHmwList[creatorID].append(hmw)
@@ -332,8 +336,10 @@ class HomeworkManager():
                 (currentHmw.userAction == HomeworkManager.HMW_ACTIONS[0] or currentHmw.userAction == HomeworkManager.HMW_ACTIONS[2]) # Homework in HMW_ADD or HMW_DELETE
                ):
                 # IF the input subject is not correct but have some similarities within the DB
-                for counter in range(1, len(currentHmw.subjectChoice) + 1):
-                    choiceEmoji = self.emojiNumber[counter]
+                for counter in range(0, len(currentHmw.subjectChoice)):
+                    print("counter", counter)
+                    print("len choice : ", len(currentHmw.subjectChoice))
+                    choiceEmoji = self.emojiNumber[counter+1]
                     emojis.append(choiceEmoji)
                     res += HomeworkMessage.HMW_UTILS['subjectChoiceReac'].substitute(reac = choiceEmoji, subject = currentHmw.subjectChoice[counter])
         if suggestedSubject:
@@ -373,7 +379,6 @@ class HomeworkManager():
                 if currentHmw.userAction == HomeworkManager.HMW_ACTIONS[2]:
                     ##### HMW_DELETE
                     (hmwList, hmwEmojis) = self.listHmwBySubject(creatorID, 10 * currentHmw.hmwPageIdx)
-                    # currentHmw.hmwPageIdx += 1
                     msgBack = self.actionMsgDict[creatorID][currentHmw.state].substitute(hmwList = hmwList)
 
                 (res, emojis) = self.formatBackMsg(currentHmw, self.suggestedSubject[creatorID], self.actionMsgDict[creatorID], emojiIDs, updateRes, msgBack, False, currentHmw.moreDocInDB)
@@ -452,6 +457,7 @@ class HomeworkManager():
             # HMW_ADD
             if len(currentHmw.doc) > 0:
                 docChan = self.chanCol.find_one({self.chanFields['subject']: currentHmw.subject, self.chanFields['catName']: 'documents'})
+                print("docChan : ", docChan)
                 chanID = docChan[self.chanFields['chanID']]
                 currentHmw.dedicatedChanID = docChan[self.chanFields['chanName']]
                 docs = currentHmw.doc
@@ -468,8 +474,7 @@ class HomeworkManager():
             # HMW_DELETE
             self.hmwCol.delete_one({self.hmwFields['subject']: currentHmw.selectedSubject['subject'], self.hmwFields['name']: currentHmw.selectedSubject['name']})
             res = HomeworkMessage.diffFormatMsg(HomeworkMessage.HMW_CONF['hmwDeletedInDB'].substitute())
-
-        return (res, emojis, chanID, docs)
+        return (res, emojis, chanID, docs), currentHmw.subject
 
     def numberedAction(self, creatorID, voteIdx):
         try:
