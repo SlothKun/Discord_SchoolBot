@@ -20,7 +20,6 @@ import locale
 # Set time in fr
 locale.setlocale(locale.LC_ALL, 'fr_FR.utf8')
 
-
 class Cog(commands.Cog):
     def __init__(self, bot):
         super().__init__()
@@ -35,8 +34,7 @@ class Cog(commands.Cog):
         #await self.hmw_sorting(list(self.db.homework.find({'subject': subject, 'deadline': {'$gte': thisDay}}).sort("deadline")))
         all_hmw = list(self.db.homework.find({'subject':subject, 'deadline': {'$gte': thisDay}}).sort("deadline"))
         #all_hmw = await self.homework_date_sorting(all_hmw)
-
-        if len(all_hmw) == 0:
+        if self.db.homework.count_documents({'subject':subject, 'deadline': {'$gte': thisDay}}) == 0:
             return
         all_std = list(self.db.students.find())
 
@@ -138,6 +136,7 @@ class Cog(commands.Cog):
             all_hmw = await self.hmw_table_img_creation(subject)
             await self.msg_embed_creation('update', subject, all_hmw)
         else:
+            print("creation")
             all_hmw = await self.hmw_table_img_creation(subject)
             await self.msg_embed_creation('create', subject, all_hmw)
 
@@ -739,8 +738,8 @@ Vous n'avez plus aucun devoir à corriger pour cet élève, dois-je tout de mêm
                 return hmw_list, int(reaction)
 
         try:
-
             channel_obj = self.db.send_recv_channels.find({'chan_send_id': str(message.channel.id)})[0]
+            print("user : ", self.bot.get_user(message.author.id))
             async with message.channel.typing():
                 prof = self.bot.get_user(int(channel_obj['teacher_id']))
                 recv_chan = self.bot.get_channel(int(channel_obj['chan_recv_id']))
