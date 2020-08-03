@@ -314,27 +314,27 @@ class Cog(commands.Cog):
     async def eleves(self, ctx):
         await ctx.send("""```
 +-----------------------------------------------------+
-|                      Eleves TS1                     |
+|                      Eleves                         |
 +----------+----------+----------+----------+---------+
-|  Alexis  |  Amelie  |  Axelle  | Baptiste | Bastian |
+|  Eleve  |  Eleve  |  Eleve  | Eleve | Eleve |
 +----------+----------+----------+----------+---------+
-|  Camille |  Charlie |  Emeline |   Emile  |   Enzo  |
+|  Eleve |  Eleve |  Eleve |   Eleve  |   Eleve  |
 +----------+----------+----------+----------+---------+
-|  Florian | Gregoire |   Hugo   |   Jason  |   Jean  |
+|  Eleve | Eleve |   Eleve   |   Eleve  |   Eleve  |
 +----------+----------+----------+----------+---------+
-|   Juan   |   Louis  |    Lea   |    Leo   |  Manon  |
+|   Eleve   |   Eleve  |    Eleve   |    Eleve   |  Eleve  |
 +----------+----------+----------+----------+---------+
-| MargauxL | MargauxQ |   Marie  |   Mateo  |   Max   |
+| Eleve | Eleve |   Eleve  |   Eleve  |   Eleve   |
 +----------+----------+----------+----------+---------+
-|  Maxence |   Mael   |  Pierre  |  Romain  |  Sarah  |
+|  Eleve |   Eleve   |  Eleve  |  Eleve  |  Eleve  |
 +----------+----------+----------+----------+---------+
-|   TheoG  |   TheoB  |  Thibaut |  Vivien  |         |
+|   Eleve  |   Eleve  |  Eleve |  Eleve  |         |
 +----------+----------+----------+----------+---------+
 
 +----------+----------+----------+----------+---------+
-|              Eleves hors TS1 (Spe ISN)              |
+|              Eleves                                 |
 +----------+----------+----------+----------+---------+
-| Lilian   |  Ambre   | MargauxO |   Mona   |         |
+| Eleve    |  Eleve   |    Eleve |  Eleve   |         |
 +----------+----------+----------+----------+---------+```""")
 
 
