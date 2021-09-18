@@ -78,7 +78,7 @@ async def reload(ctx, extension):
         print(f"Extension {extension} can not be loaded")
         print(e)
 
-#TEMP BECAUSE FAIGNASSE
+#TEMP BECAUSE
 @schoolBot.command()
 async def q(ctx):
     """Commande '!q' : permet de recharger automatiquement l'extension 'schoolCog'"""
